@@ -1,5 +1,5 @@
-# local-config
-The `local-config` project is an attempt at wrangling the complexity of configuring many
+# autoconf
+The `autoconf` project is an attempt at wrangling the complexity of configuring many
 applications across one's Linux system. It provides a simple operational model for pulling
 many application config files into one place, as well as generating/setting color schemes
 across apps.
@@ -43,7 +43,7 @@ provided theme name.)
 For apps of type (2), the canonical config file can remain untouched so long as it refers
 to a fixed, generic theme file. For example, with `kitty`, my config file can point to a
 `current-theme.conf` file, which will be symlinked to a specific theme file here in
-`local-config` when a change is requested. This enables a couple of conveniences:
+`autoconf` when a change is requested. This enables a couple of conveniences:
 
 - The true config directory on disk remains unpolluted with theme variants.
 - If the set theme is regenerated, there is no intervention necessary to propagate its
@@ -79,14 +79,14 @@ appropriately:
   Additionally, the theme symlink will be created from the file
 
   ```
-  <local-config-root>/local-config/themes/<palette>/apps/<app-name>/generated/<scheme>.conf
+  <autoconf-root>/autoconf/themes/<palette>/apps/<app-name>/generated/<scheme>.conf
   ```
 
   to `<config-dir>/current-theme.conf`. 
 
 ## Directory structure
 
-- `local-config/`: main repo directory
+- `autoconf/`: main repo directory
     * `config/`: app-specific configuration files. Each folder inside this directory is
       app-specific, and the target of associated copy operations when a config sync is
       performed. Nothing in this directory should pertain to any repo functionality; it
@@ -118,7 +118,7 @@ appropriately:
 - Uses symlinks to set canonical config files to theme-based variations. Which files get
   set depends on the _app type_ (see above), which really just boils down to whether
   theming (1) can be specified with an external format, and (2) if it depends on
-  auto-generated theme files from within `local-config`.
+  auto-generated theme files from within `autoconf`.
 - Palette and scheme are specified as expected. They are used to infer proper paths
   according to naming and structure standards.
 - Real config files will never be overwritten. To begin setting themes with the script,
@@ -157,7 +157,7 @@ variables to the color names provided by the template.
   line-generating functions, which accept the keyword and color (among other items). This
   can be fleshed out as needed.
 
-`sync.sh`: copies relevant configuration files from local paths into the `local-config`
+`sync.sh`: copies relevant configuration files from local paths into the `autoconf`
 subpath. Markdown files in the docs directory then reference the local copies of these
 files, meaning the documentation updates dynamically when the configuration files do. That
 is, the (possibly extracted) config snippets will change with the current state of my
@@ -212,7 +212,7 @@ browser (and note the white tab icon).)_
       this file under the `kitty` config directory:
 
       ```sh
-      .config/kitty/current-theme.conf: symbolic link to ~/Documents/projects/local-config/local-config/themes/tone4/apps/kitty/generated/light.conf
+      .config/kitty/current-theme.conf: symbolic link to ~/Documents/projects/autoconf/autoconf/themes/tone4/apps/kitty/generated/light.conf
       ```
 
       The `kitty.conf` file isn't changed, as all palette-related items are specified in

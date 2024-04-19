@@ -87,7 +87,7 @@ def update_theme_settings():
             # symlink from "current-theme.conf" in app's config-dir ...
             from_conf_path = Path(config_dir, 'current-theme.conf')
 
-            # ... to appropriate generated theme path here in local-config
+            # ... to appropriate generated theme path here in autoconf
             to_conf_path = Path(
                 basepath,
                 f'themes/{args.palette}/apps/{app_name}/generated/{args.scheme}.conf'
