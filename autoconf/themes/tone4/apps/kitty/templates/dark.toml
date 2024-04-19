@@ -1,0 +1,40 @@
+# base settings
+background           = 'black.bg+1'
+foreground           = 'black.fg+3'
+
+selection_background = 'black.bg+3'
+selection_foreground = 'black.m+4'
+
+cursor               = 'black.fg+2'
+
+# black
+color0               = 'black.bg+2'
+color8               = 'black.bg+2'
+
+# red
+color1               = 'red.m+2'
+color9               = 'red.m+2'
+
+# green
+color2               = 'green.m+2'
+color10              = 'green.m+2'
+
+# yellow
+color3               = 'yellow.m+2'
+color11              = 'yellow.m+2'
+
+# blue
+color4               = 'blue.m+2'
+color12              = 'blue.m+2'
+
+# purple (red)
+color5               = 'red.m+2'
+color13              = 'red.m+2'
+
+# cyan (blue)
+color6               = 'blue.m+2'
+color14              = 'blue.m+2'
+
+## white
+color7               = 'black.fg+2'
+color15              = 'black.fg+2'

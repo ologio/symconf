@@ -1,0 +1,42 @@
+# App registry -- apps eligible for theme switching
+#
+# Each app must be register under the "app" directive, i.e., as "[app.<app-name>]"
+#
+# Option details:
+# - external_theme: if False (default), indicates an app of type 1 as per the README. That
+#   is, an external theme file cannot be used, and theme switching will involve switch the
+#   canonical config setting. If True, the app's theme can be set through an external theme
+#   file.
+# - support_os: OSes that support theme switching according to the implemented paths.
+#   Accepts a list of `uname -s` strings to match system.
+# - refresh_cmd: a command to run for live refreshing the application's color scheme after
+#   it's been set for running instances.
+#
+# Default example 
+# [app.default]
+# external_theme = False
+# config_dir     = '~/.config/default/'
+# config_file    = 'default.conf'
+# refresh_cmd    = 'app reload-config'
+# 
+
+[app.kitty]
+external_theme = true
+config_dir     = '~/.config/kitty/'
+config_file    = 'kitty.conf'
+supported_oses = ['Linux', 'Darwin']
+refresh_cmd    = 'kill -s USR1 $(pgrep kitty)'
+
+[app.sway]
+external_theme = false
+config_dir     = '~/.config/sway/'
+config_file    = 'config'
+supported_oses = ['Linux']
+#refresh_cmd    = 'swaymsg reload'
+
+[app.waybar]
+external_theme = false
+config_dir     = '~/.config/waybar/'
+config_file    = 'style.css'
+supported_oses = ['Linux']
+refresh_cmd    = 'swaymsg reload'
