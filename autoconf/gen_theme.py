@@ -9,33 +9,36 @@ def get_running_path():
     return Path(calling_module.__file__).parent
 
 
-parser = argparse.ArgumentParser(
-    description='Generate theme files for various applications. Uses a template (in TOML ' \
-              + 'format) to map application-specific config keywords to colors (in JSON '  \
-              + 'format).' 
-)
-parser.add_argument(
-    '-a', '--app',
-    required=True,
-    help='Application target for theme. Supported: ["kitty"]'
-)
-parser.add_argument(
-    '-p', '--palette',
-    required=True,
-    help='Palette to use for template mappings. Uses local "theme/<palette>/colors.json".'
-)
-parser.add_argument(
-    '-t', '--template',
-    default=None,
-    help='Path to TOML template file. If omitted, app\'s default template path is used.' \
-       + 'If a directory is provided, all TOML files in the folder will be used.'
-)
-parser.add_argument(
-    '-o', '--output',
-    default=None,
-    help='Output file path for theme. If omitted, app\'s default theme output path is used.'
-)
-args = parser.parse_args()
+def add_gen_subparser(subparsers):
+    parser = subparsers.add_parser(
+        'gen',
+        description='Generate theme files for various applications. Uses a template (in TOML ' \
+                  + 'format) to map application-specific config keywords to colors (in JSON '  \
+                  + 'format).' 
+    )
+    parser.add_argument(
+        '-a', '--app',
+        required=True,
+        help='Application target for theme. Supported: ["kitty"]'
+    )
+    parser.add_argument(
+        '-p', '--palette',
+        required=True,
+        help='Palette to use for template mappings. Uses local "theme/<palette>/colors.json".'
+    )
+    parser.add_argument(
+        '-t', '--template',
+        default=None,
+        help='Path to TOML template file. If omitted, app\'s default template path is used.' \
+           + 'If a directory is provided, all TOML files in the folder will be used.'
+    )
+    parser.add_argument(
+        '-o', '--output',
+        default=None,
+        help='Output file path for theme. If omitted, app\'s default theme output path is used.'
+    )
+    parser.set_defaults(func=generate_theme_files)
+
 
 # separation sequences to use base on app
 app_sep_map = {
@@ -104,5 +107,3 @@ def generate_theme_files():
         output_file.write_text('\n'.join(output_lines))
         print(f'[{len(output_lines)}] lines written to [{output_file}] for app [{theme_app}]')
 
-if __name__ == '__main__':
-    generate_theme_files()

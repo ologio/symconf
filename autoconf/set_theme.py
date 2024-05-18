@@ -8,29 +8,30 @@ from pathlib import Path
 
 from colorama import Fore
 
-
-parser = argparse.ArgumentParser(
-    description='Generate theme files for various applications. Uses a template (in TOML ' \
-              + 'format) to map application-specific config keywords to colors (in JSON '  \
-              + 'format).' 
-)
-parser.add_argument(
-    '-p', '--palette',
-    required=True,
-    help='Palette name, must match a folder in themes/'
-)
-parser.add_argument(
-    '-s', '--scheme',
-    required=True,
-    help='Preferred lightness scheme, either "light" or "dark".'
-)
-parser.add_argument(
-    '-a', '--app',
-    required=True,
-    help='Application target for theme. App must be present in the registry. ' \
-       + 'Use "*" to apply to all registered apps'
-)
-args = parser.parse_args()
+def add_set_subparser(subparsers):
+    parser = subparsers.add_parser(
+        'set',
+        description='Generate theme files for various applications. Uses a template (in TOML ' \
+                  + 'format) to map application-specific config keywords to colors (in JSON '  \
+                  + 'format).' 
+    )
+    parser.add_argument(
+        '-p', '--palette',
+        required=True,
+        help='Palette name, must match a folder in themes/'
+    )
+    parser.add_argument(
+        '-s', '--scheme',
+        required=True,
+        help='Preferred lightness scheme, either "light" or "dark".'
+    )
+    parser.add_argument(
+        '-a', '--app',
+        required=True,
+        help='Application target for theme. App must be present in the registry. ' \
+           + 'Use "*" to apply to all registered apps'
+    )
+    parser.set_defaults(func=update_theme_settings)
 
 
 def get_running_path():
