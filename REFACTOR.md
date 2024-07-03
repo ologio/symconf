@@ -50,3 +50,5 @@
 - Config TOML accepts either `config_dir` or `config_map`, nothing else and only one of
   the two.
 - Refresh scripts should likely specify a shell shabang at the top of the file
+- `apps` can serve as a dotfiles folder
+- Support symlinking whole folders?

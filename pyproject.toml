@@ -6,8 +6,8 @@ build-backend = "setuptools.build_meta"
 enabled = true
 
 [project]
-name = "co3"
-description = "Lightweight Python ORM for hierarchical storage management"
+name = "symconf"
+description = "Local app configuration manager"
 readme = "README.md"
 requires-python = ">=3.12"
 dynamic = ["version"]
@@ -15,7 +15,7 @@ dynamic = ["version"]
 authors = [
   { name="Sam Griesemer", email="samgriesemer+git@gmail.com" },
 ]
-keywords = ["database", "orm"]
+keywords = ["config"]
 classifiers = [
     "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: MIT License",
@@ -24,11 +24,7 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 dependencies = [
-    "tqdm",
-    "wcmatch",
-    "numpy",
-    "sqlalchemy",
-    "colorama",
+    "pyxdg",
 ]
 
 [project.optional-dependencies]
@@ -42,11 +38,11 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://doc.olog.io/co3"
-Documentation = "https://doc.olog.io/co3"
-Repository = "https://git.olog.io/olog/co3"
-Issues = "https://git.olog.io/olog/co3/issues"
+Homepage = "https://doc.olog.io/symconf"
+Documentation = "https://doc.olog.io/symconf"
+Repository = "https://git.olog.io/olog/symconf"
+Issues = "https://git.olog.io/olog/symconf/issues"
 
 
 [tool.setuptools.packages.find]
-include = ["co3*"] # pattern to match package names 
+include = ["symconf*"] # pattern to match package names 
