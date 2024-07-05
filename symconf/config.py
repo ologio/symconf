@@ -424,6 +424,8 @@ class ConfigManager:
                         full_path, # to internal config location
                     ))
 
+        print('├─ ' + Fore.YELLOW + f'{app_name} :: matched {len(to_symlink)} config files')
+
         links_succ = []
         links_fail = []
         for from_path, to_path in to_symlink:
@@ -455,6 +457,17 @@ class ConfigManager:
             from_path.symlink_to(to_path)
             links_succ.append((from_path, to_path))
 
+        # link report
+        for from_p, to_p in links_succ:
+            from_p = from_p
+            to_p   = to_p.relative_to(self.config_dir)
+            print(Fore.GREEN + f'│  > linked {from_p} -> {to_p}')
+
+        for from_p, to_p in links_fail:
+            from_p = from_p
+            to_p   = to_p.relative_to(self.config_dir)
+            print(Fore.RED + f'│  > failed to link {from_p} -> {to_p}')
+
         # run matching scripts for app-specific reload
         script_list = self.get_matching_scripts(
             app_name,
@@ -463,21 +476,15 @@ class ConfigManager:
         )
 
         for script in script_list:
-            print(Fore.BLUE + f'> Running script "{script.relative_to(self.config_dir)}"')
+            print(Fore.BLUE + f'│  > running script "{script.relative_to(self.config_dir)}"')
             output = subprocess.check_output(str(script), shell=True)
-            print(
-                Fore.BLUE + Style.DIM + f'-> Captured script output "{output.decode().strip()}"' + Style.RESET_ALL
-            )
-
-        for from_p, to_p in links_succ:
-            from_p = from_p
-            to_p   = to_p.relative_to(self.config_dir)
-            print(Fore.GREEN + f'> {app_name} :: {from_p} -> {to_p}')
-
-        for from_p, to_p in links_fail:
-            from_p = from_p
-            to_p   = to_p.relative_to(self.config_dir)
-            print(Fore.RED + f'> {app_name} :: {from_p} -> {to_p}')
+            if output:
+                fmt_output = output.decode().strip().replace('\n','\n│    ')
+                print(
+                    Fore.BLUE + Style.DIM \
+                    + f'│  > captured script output "{fmt_output}"' \
+                    + Style.RESET_ALL
+                )
 
     def update_apps(
         self,
@@ -495,6 +502,11 @@ class ConfigManager:
         if not app_list:
             print(f'None of the apps "{apps}" are registered, exiting')
             return
+
+        print('> symconf parameters: ')
+        print('  > registered apps :: ' + Fore.YELLOW + f'{app_list}' + Style.RESET_ALL)
+        print('  > palette         :: ' + Fore.YELLOW + f'{palette}'  + Style.RESET_ALL)
+        print('  > scheme          :: ' + Fore.YELLOW + f'{scheme}\n' + Style.RESET_ALL)
 
         for app_name in app_list:
             self.update_app_config(
