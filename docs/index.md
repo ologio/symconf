@@ -1,4 +1,4 @@
-# `autoconf` package docs 
+# `symconf` package docs 
 {ref}`genindex`
 {ref}`modindex`
 {ref}`search`
@@ -14,15 +14,17 @@
 :maxdepth: 3
 :caption: Autoref
 
-_autoref/autoconf.rst
+_autoref/symconf.rst
 ```
 
 ```{toctree}
 :maxdepth: 3
 :caption: Contents
 
+reference/configuring
+reference/usage
+reference/archive
 reference/documentation/index
-reference/site/index
 ```
 
 ```{include} ../README.md

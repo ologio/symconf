@@ -1,13 +1,12 @@
 import argparse
 
-import util
-#from gen_theme import generate_theme_files
-from autoconf.config import ConfigManager
+from symconf import util
+from symconf.config import ConfigManager
 
 
 def add_set_subparser(subparsers):
     def update_app_settings(args):
-        cm = ConfigManager(args.config_dif)
+        cm = ConfigManager(args.config_dir)
         cm.update_apps(
             apps=args.apps,
             scheme=args.scheme,
@@ -35,8 +34,8 @@ def add_set_subparser(subparsers):
     parser.add_argument(
         '-a', '--apps',
         required = False,
-        default  = "any",
-        type     = lambda s: s.split(',') if s != '*' else s
+        default  = "*",
+        type     = lambda s: s.split(',') if s != '*' else s,
         help     = 'Application target for theme. App must be present in the registry. ' \
                  + 'Use "*" to apply to all registered apps'
     )
@@ -75,7 +74,7 @@ def add_gen_subparser(subparsers):
 
 # central argparse entry point
 parser = argparse.ArgumentParser(
-    'autoconf',
+    'symconf',
     description='Generate theme files for various applications. Uses a template (in TOML ' \
               + 'format) to map application-specific config keywords to colors (in JSON '  \
               + 'format).' 
@@ -88,13 +87,14 @@ parser.add_argument(
 )
 
 # add subparsers
-subparsers = parser.get_subparsers()
+subparsers = parser.add_subparsers(title='subcommand actions')
 #add_gen_subparser(subparsers)
 add_set_subparser(subparsers)
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
+    print(args)
 
     if 'func' in args:
         args.func(args)

@@ -25,6 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "pyxdg",
+    "colorama",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,7 @@ docs = [
     "furo",
     "myst-parser",
 ]
+build = ["build", "twine"]
 
 [project.urls]
 Homepage = "https://doc.olog.io/symconf"

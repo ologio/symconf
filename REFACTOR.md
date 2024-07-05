@@ -52,3 +52,4 @@
 - Refresh scripts should likely specify a shell shabang at the top of the file
 - `apps` can serve as a dotfiles folder
 - Support symlinking whole folders?
+- `any` might prefer to match configs with none over specific options, but will match any
