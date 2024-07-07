@@ -101,7 +101,8 @@ def test_matching_scripts():
     3. (palette, none)   :: test-none.sh
     4. (palette, scheme) :: (nothing)
 
-    Yielding (ordered by dec specificity) "test-none.sh", "none-light.sh", "none-none.sh".
+    Yielding (ordered by dec specificity) "test-none.sh" as primary match, then relaxation
+    match "none-none.sh".
     '''
     test_any = cm.get_matching_scripts(
         'test', 
@@ -109,8 +110,8 @@ def test_matching_scripts():
         scheme='any',
     )
 
-    assert len(test_any) == 3
-    assert test_any == ['test-none.sh', 'none-light.sh', 'none-none.sh']
+    assert len(test_any) == 2
+    assert list(map(lambda p:p.name, test_any)) == ['test-none.sh', 'none-none.sh']
 
     any_light = cm.get_matching_scripts(
         'test', 
@@ -118,8 +119,8 @@ def test_matching_scripts():
         scheme='light',
     )
 
-    assert len(any_light) == 3
-    assert any_light == ['test-none.sh', 'none-light.sh', 'none-none.sh']
+    assert len(any_light) == 2
+    assert list(map(lambda p:p.name, any_light)) == ['none-light.sh', 'none-none.sh']
 
     any_dark = cm.get_matching_scripts(
         'test', 
@@ -128,4 +129,4 @@ def test_matching_scripts():
     )
 
     assert len(any_dark) == 2
-    assert any_dark == ['test-none.sh', 'none-none.sh']
+    assert list(map(lambda p:p.name, any_dark)) == ['test-none.sh', 'none-none.sh']
