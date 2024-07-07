@@ -12,6 +12,8 @@ from colorama import Fore, Back, Style
 from symconf import util
 from symconf.reader import DictReader
 
+def y(t):
+    return Style.RESET_ALL + Fore.YELLOW + t + Style.RESET_ALL
 
 class ConfigManager:
     def __init__(
@@ -114,14 +116,10 @@ class ConfigManager:
         '''
         # first look in "generated", then overwrite with "user"
         file_map = {}
-        app_dir  = Path(self.apps_dir, app_name)
-        for subdir in ['generated', 'user']:
-            subdir_path = Path(app_dir, subdir)
+        user_app_dir = Path(self.apps_dir, app_name, 'user')
 
-            if not subdir_path.is_dir():
-                continue
-
-            for conf_file in subdir_path.iterdir():
+        if user_app_dir.is_dir():
+            for conf_file in user_app_dir.iterdir():
                 file_map[conf_file.name] = conf_file
 
         return file_map
@@ -215,8 +213,9 @@ class ConfigManager:
         ordered_matches = []
         for i, (palette_prefix, scheme_prefix) in enumerate(prefix_order):
             for theme_part, conf_part, pathname in file_parts:
-                theme_split = theme_part.split('-')
-                palette_part, scheme_part = '-'.join(theme_split[:-1]), theme_split[-1]
+                theme_split  = theme_part.split('-')
+                scheme_part  = theme_split[-1]
+                palette_part = '-'.join(theme_split[:-1])
 
                 palette_match = palette_prefix == palette_part or palette_prefix == 'any'
                 scheme_match = scheme_prefix == scheme_part or scheme_prefix == 'any'
@@ -232,6 +231,8 @@ class ConfigManager:
         '''
         Mostly to filter "any" matches, latching onto a particular result and getting
         only its relaxed variants.
+
+        Note that palette-scheme files can be named ``<variant>-<palette>-<scheme>``
         '''
         if not match_list:
             return []
@@ -242,8 +243,13 @@ class ConfigManager:
 
         relaxed_map = {}
         for conf_part, theme_part, pathname, idx in match_list:
-            theme_split = theme_part.split('-')
-            palette_part, scheme_part = '-'.join(theme_split[:-1]), theme_split[-1]
+            #theme_split  = theme_part.split('-')[::-1]
+            #scheme_part  = theme_split[0]
+            #palette_part = theme_split[1]
+            theme_split  = theme_part.split('-')
+            scheme_part  = theme_split[-1]
+            palette_part = '-'.join(theme_split[:-1])
+            #pvar_part    = '-'.join(theme_split[2:])
 
             palette_match = palette_part == palette_tgt or palette_part == 'none'
             scheme_match = scheme_part == scheme_tgt or scheme_part == 'none'
@@ -297,7 +303,7 @@ class ConfigManager:
             for k, v in kw_groups.items()
         }
         # palette lookup will behave like other groups
-        groups['palette'] = palette
+        groups['palette'] = palette.split('-')[-1]
 
         group_dir = Path(self.config_dir, 'groups')
         if not group_dir.exists():
@@ -338,6 +344,8 @@ class ConfigManager:
                     match_dict[stem] = stem_map[stem]
 
             group_matches[fkey] = list(match_dict.values())
+
+        print(group_matches)
 
         # first handle scheme maps; matching palette files should already be found in the
         # regular group matching process
@@ -473,11 +481,11 @@ class ConfigManager:
 
         template_map = {}
         template_dir = Path(self.apps_dir, app_name, 'templates')
-        if template_dir.exists():
+        if template_dir.is_dir():
             for template_file in template_dir.iterdir():
                 template_map[template_file.name] = template_file
 
-        return template_map, template_dict, max_idx
+        return template_map, template_dict, relaxed_matches, max_idx
 
     def get_matching_scripts(
         self,
@@ -558,7 +566,7 @@ class ConfigManager:
             return
 
         # merge templates and user-provided configs
-        template_map, template_dict, tidx = self.get_matching_templates(
+        template_map, template_dict, template_matches, tidx = self.get_matching_templates(
             app_name,
             scheme=scheme,
             palette=palette,
@@ -576,10 +584,20 @@ class ConfigManager:
         generated_path = Path(self.apps_dir, app_name, 'generated')
         generated_path.mkdir(parents=True, exist_ok=True)
 
+        # flatten matches
+        generated_paths  = [m[2] for m in template_matches]
+        generated_config = {}
+
         file_map = {}
         for tail, full_path in template_map.items():
-            if tail in config_map and config_map[tail][2] >= tidx:
-                file_map[tail] = config_map[tail]
+            # use config only if strictly better match
+            # the P-S match forms rules the match quality; if additional args from
+            # templates (e.g. "font") match available groups but there is still a better
+            # P-S match in "user/", it will beat out the template (b/c the "user" config
+            # is concrete). If they're on the same level, prefer the template match for
+            # flexibility (guarantees same P-S match and extra group customization).
+            if tail in config_map and config_map[tail][1] > tidx:
+                file_map[tail] = config_map[tail][0]
             else:
                 template_str = full_path.open('r').read()
                 filled_template = self.template_fill(template_str, template_dict)
@@ -587,6 +605,8 @@ class ConfigManager:
                 config_path = Path(generated_path, tail)
                 config_path.write_text(filled_template)
                 file_map[tail] = config_path
+
+                generated_config[tail] = generated_paths
 
         for tail, (full_path, idx) in config_map.items():
             if tail not in file_map:
@@ -607,6 +627,22 @@ class ConfigManager:
                         abs_pat(Path(app_settings['config_map'][config_tail])), # point from real config path
                         full_path, # to internal config location
                     ))
+
+        # run matching scripts for app-specific reload
+        script_list = self.get_matching_scripts(
+            app_name,
+            scheme=scheme,
+            palette=palette,
+        )
+
+        print(
+            f'{y("├─")} ' + Fore.YELLOW + f'{app_name} :: matched ({len(to_symlink)}) config files and ({len(script_list)}) scripts'
+        )
+        for tail, gen_paths in generated_config.items():
+            print(
+                f'{y("│")}' + Fore.GREEN + Style.DIM + \
+                f'  > generating config "{tail}" from {gen_paths}' + Style.RESET_ALL
+            )
 
         links_succ = []
         links_fail = []
@@ -639,37 +675,27 @@ class ConfigManager:
             from_path.symlink_to(to_path)
             links_succ.append((from_path, to_path))
 
-        # run matching scripts for app-specific reload
-        script_list = self.get_matching_scripts(
-            app_name,
-            scheme=scheme,
-            palette=palette,
-        )
-
-        print(
-            '├─ ' + Fore.YELLOW + f'{app_name} :: matched {len(to_symlink)} config files and {len(script_list)} scripts'
-        )
-
         # link report
         for from_p, to_p in links_succ:
             from_p = from_p
             to_p   = to_p.relative_to(self.config_dir)
-            print(Fore.GREEN + f'│  > linked {from_p} -> {to_p}')
+            print(f'{y("│")}' + Fore.GREEN + f'  > linked {from_p} -> {to_p}')
 
         for from_p, to_p in links_fail:
             from_p = from_p
             to_p   = to_p.relative_to(self.config_dir)
-            print(Fore.RED + f'│  > failed to link {from_p} -> {to_p}')
+            print(f'{y("│")}' + Fore.RED + f'  > failed to link {from_p} -> {to_p}')
 
 
         for script in script_list:
-            print(Fore.BLUE + f'│  > running script "{script.relative_to(self.config_dir)}"')
+            print(f'{y("│")}' + Fore.BLUE + f'  > running script "{script.relative_to(self.config_dir)}"')
             output = subprocess.check_output(str(script), shell=True)
             if output:
-                fmt_output = output.decode().strip().replace('\n','\n│    ')
+                fmt_output = output.decode().strip().replace('\n',f'\n{y("│")}    ')
                 print(
-                    Fore.BLUE + Style.DIM \
-                    + f'│  > captured script output "{fmt_output}"' \
+                    f'{y("│")}' + \
+                    Fore.BLUE + Style.DIM + \
+                    f'  > captured script output "{fmt_output}"' \
                     + Style.RESET_ALL
                 )
 
