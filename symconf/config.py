@@ -345,8 +345,6 @@ class ConfigManager:
 
             group_matches[fkey] = list(match_dict.values())
 
-        print(group_matches)
-
         # first handle scheme maps; matching palette files should already be found in the
         # regular group matching process
         palette_dict = self._stack_toml(group_matches.get('palette', []))

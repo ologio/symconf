@@ -28,6 +28,9 @@ dependencies = [
     "colorama",
 ]
 
+[project.scripts]
+symconf = "symconf.__main__:main"
+
 [project.optional-dependencies]
 tests = ["pytest"]
 docs = [

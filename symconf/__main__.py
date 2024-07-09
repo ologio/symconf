@@ -92,10 +92,13 @@ subparsers = parser.add_subparsers(title='subcommand actions')
 add_set_subparser(subparsers)
 
 
-if __name__ == '__main__':
+def main():
     args = parser.parse_args()
 
     if 'func' in args:
         args.func(args)
     else:
         parser.print_help()
+
+if __name__ == '__main__':
+    main()
