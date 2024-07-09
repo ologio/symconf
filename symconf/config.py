@@ -307,7 +307,7 @@ class ConfigManager:
 
         group_dir = Path(self.config_dir, 'groups')
         if not group_dir.exists():
-            return {}
+            return {}, []
 
         # handle non-palette-scheme groups
         group_matches = {}
