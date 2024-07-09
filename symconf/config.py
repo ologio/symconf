@@ -490,7 +490,7 @@ class ConfigManager:
         app_name,
         scheme='any',
         palette='any',
-    ):
+    ) -> list:
         '''
         Execute matching scripts in the app's ``call/`` directory.
 
@@ -513,7 +513,7 @@ class ConfigManager:
         call_dir = Path(app_dir, 'call')
         
         if not call_dir.is_dir():
-            return
+            return []
 
         prefix_order = [
             ('none'  , 'none'),
