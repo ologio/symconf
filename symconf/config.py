@@ -622,7 +622,7 @@ class ConfigManager:
                 # app's config map points config tails to absolute paths
                 if config_tail in app_settings['config_map']:
                     to_symlink.append((
-                        abs_pat(Path(app_settings['config_map'][config_tail])), # point from real config path
+                        util.absolute_path(Path(app_settings['config_map'][config_tail])), # point from real config path
                         full_path, # to internal config location
                     ))
 
@@ -659,8 +659,9 @@ class ConfigManager:
             # previously set by this script), throw an error. 
             if from_path.exists() and not from_path.is_symlink():
                 print(
+                    Fore.RED + \
                     f'Symlink target "{from_path}" exists and isn\'t a symlink, NOT overwriting;' \
-                   + ' please first manually remove this file so a symlink can be set.'
+                    + ' please first manually remove this file so a symlink can be set.'
                 )
                 links_fail.append((from_path, to_path))
                 continue
