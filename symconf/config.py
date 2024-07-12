@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import stat
 import inspect
 import tomllib
 import argparse
@@ -12,8 +13,9 @@ from colorama import Fore, Back, Style
 from symconf import util
 from symconf.reader import DictReader
 
+
 def y(t):
-    return Style.RESET_ALL + Fore.YELLOW + t + Style.RESET_ALL
+    return Style.RESET_ALL + Fore.BLUE + t + Style.RESET_ALL
 
 class ConfigManager:
     def __init__(
@@ -91,6 +93,30 @@ class ConfigManager:
             return 'any'
 
         return value
+
+    def _run_script(
+        self,
+        script,
+    ):
+        script_path = Path(script)
+        if script_path.stat().st_mode & stat.S_IXUSR == 0:
+            print(
+                f'{y("│")}' + Fore.RED + Style.DIM \
+                + f'  > script "{script_path.relative_to(self.config_dir)}" missing execute permissions, skipping'
+            )
+            return
+
+        print(f'{y("│")}' + Fore.BLUE + Style.DIM + f'  > running script "{script_path.relative_to(self.config_dir)}"')
+
+        output = subprocess.check_output(str(script_path), shell=True)
+        if output:
+            fmt_output = output.decode().strip().replace('\n',f'\n{y("│")}    ')
+            print(
+                f'{y("│")}' + \
+                Fore.BLUE + Style.DIM + \
+                f'  > captured script output "{fmt_output}"' \
+                + Style.RESET_ALL
+            )
 
     def app_config_map(self, app_name) -> dict[str, Path]:
         '''
@@ -650,11 +676,6 @@ class ConfigManager:
                 links_fail.append((from_path, to_path))
                 continue
 
-            if not from_path.parent.exists():
-                print(f'Target config parent directory for "{from_path}" doesn\'t exist, skipping')
-                links_fail.append((from_path, to_path))
-                continue
-
             # if config file being symlinked exists & isn't already a symlink (i.e.,
             # previously set by this script), throw an error. 
             if from_path.exists() and not from_path.is_symlink():
@@ -671,6 +692,10 @@ class ConfigManager:
                 from_path.unlink(missing_ok=True)
 
             #print(f'Linking [{from_path}] -> [{to_path}]')
+
+            # create parent directory if doesn't exist
+            from_path.parent.mkdir(parents=True, exist_ok=True)
+
             from_path.symlink_to(to_path)
             links_succ.append((from_path, to_path))
 
@@ -685,20 +710,10 @@ class ConfigManager:
             to_p   = to_p.relative_to(self.config_dir)
             print(f'{y("│")}' + Fore.RED + f'  > failed to link {from_p} -> {to_p}')
 
-
         for script in script_list:
-            print(f'{y("│")}' + Fore.BLUE + f'  > running script "{script.relative_to(self.config_dir)}"')
-            output = subprocess.check_output(str(script), shell=True)
-            if output:
-                fmt_output = output.decode().strip().replace('\n',f'\n{y("│")}    ')
-                print(
-                    f'{y("│")}' + \
-                    Fore.BLUE + Style.DIM + \
-                    f'  > captured script output "{fmt_output}"' \
-                    + Style.RESET_ALL
-                )
+            self._run_script(script)
 
-    def update_apps(
+    def config_apps(
         self,
         apps: str | list[str] = '*',
         scheme                = 'any',
@@ -723,6 +738,11 @@ class ConfigManager:
         print('  > scheme          :: ' + Fore.YELLOW + f'{scheme}\n' + Style.RESET_ALL)
 
         for app_name in app_list:
+            app_dir = Path(self.apps_dir, app_name)
+            if not app_dir.exists():
+                # app has no directory, skip it
+                continue
+
             self.update_app_config(
                 app_name,
                 app_settings=self.app_registry[app_name],
@@ -731,3 +751,53 @@ class ConfigManager:
                 strict=False,
                 **kw_groups,
             )
+
+    def install_apps(
+        self,
+        apps: str | list[str] = '*',
+    ):
+        if apps == '*':
+            # get all registered apps
+            app_list = list(self.app_registry.keys())
+        else:
+            # get requested apps that overlap with registry
+            app_list = [a for a in apps if a in self.app_registry]
+
+        if not app_list:
+            print(f'None of the apps "{apps}" are registered, exiting')
+            return
+
+        print('> symconf parameters: ')
+        print('  > registered apps :: ' + Fore.YELLOW + f'{app_list}' + Style.RESET_ALL)
+
+        for app_name in app_list:
+            install_script = Path(self.apps_dir, app_name, 'install.sh')
+            if not install_script.exists():
+                continue
+
+            self._run_script(install_script)
+
+    def update_apps(
+        self,
+        apps: str | list[str] = '*',
+    ):
+        if apps == '*':
+            # get all registered apps
+            app_list = list(self.app_registry.keys())
+        else:
+            # get requested apps that overlap with registry
+            app_list = [a for a in apps if a in self.app_registry]
+
+        if not app_list:
+            print(f'None of the apps "{apps}" are registered, exiting')
+            return
+
+        print('> symconf parameters: ')
+        print('  > registered apps :: ' + Fore.YELLOW + f'{app_list}' + Style.RESET_ALL)
+
+        for app_name in app_list:
+            update_script = Path(self.apps_dir, app_name, 'update.sh')
+            if not update_script.exists():
+                continue
+
+            self._run_script(update_script)
