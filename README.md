@@ -10,7 +10,7 @@ Below is a simple example demonstrating two system-wide theme switches:
 
 This GIF shows two `symconf` calls, the first of which applies a `gruvbox` dark theme and
 the second a dark [`monobiome`][1] variant. Each call (of the form `symconf config -m dark -s
-<style>`) indicates a dark mode preference and a particular color palette that should be
+style`) indicates a dark mode preference and a particular color palette that should be
 used when populating config file templates. Specifically, in this example, invoking
 `symconf` results in the following app-specific config updates:
 

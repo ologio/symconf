@@ -544,7 +544,7 @@ class ConfigManager:
             2. Get matching user config files via ``get_matching_configs()``
             3. Get matching template config files and the aggregate template dict via
                ``get_matching_templates()``
-            4. Interleave the two the result sets by pathname and match quality. Template
+            4. Interleave the two result sets by pathname and match quality. Template
                matches are preferred in the case of tied scores. This resolves any
                pathname clashes across matching files.
 
