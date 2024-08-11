@@ -43,12 +43,12 @@ def add_update_subparser(subparsers):
     parser.set_defaults(func=update_apps)
 
 def add_config_subparser(subparsers):
-    def config_apps(args):
+    def configure_apps(args):
         cm = ConfigManager(args.config_dir)
-        cm.config_apps(
+        cm.configure_apps(
             apps=args.apps,
             scheme=args.scheme,
-            palette=args.palette,
+            style=args.palette,
         )
 
     parser = subparsers.add_parser(
@@ -82,7 +82,7 @@ def add_config_subparser(subparsers):
         action=util.KVPair,
         help='Groups to use when populating templates, in the form group=value'
     )
-    parser.set_defaults(func=config_apps)
+    parser.set_defaults(func=configure_apps)
 
 
 # central argparse entry point

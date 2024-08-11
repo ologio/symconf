@@ -1,0 +1,2 @@
+[app.test]
+config_dir = 'sym_tgt/test'

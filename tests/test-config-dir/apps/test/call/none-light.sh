@@ -1,1 +1,1 @@
-echo "> none-light ran"
+echo "none-light ran"

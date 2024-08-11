@@ -1,1 +1,1 @@
-echo "> none-none ran"
+echo "none-none ran"

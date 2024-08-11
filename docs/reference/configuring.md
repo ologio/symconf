@@ -7,6 +7,14 @@ to apply. The default location for this directory is your `$XDG_CONFIG_HOME` (e.
 `symconf` expects you to create two top-level components in your config directory: an
 `apps/` directory and an `app_registry.toml` file.
 
+**High-level view**:
+
+- `symconf` operates on a single directory that houses all your config files
+- Config files in this directory must be placed under an `apps/<app-name>/` folder to be
+  associated with the app `<app-name>`
+- For apps to be visible, you need an `app_registry.toml` file that tells `symconf` where
+  to symlink your files in `apps/`
+
 ## Apps directory
 An `apps/` directory should be created in your config home, with a subdirectory
 `apps/<app-name>/` for each app with config files that you'd like to be visible to
@@ -40,8 +48,8 @@ as follows:
   transparency, etc). Use `none` to indicate that the file does not correspond to any
   particular style group.
 - `config-name`: the _name_ of the config file. This should correspond to _same path
-  name_ that is expected by the app. For example, if your app expects a config file at
-  `a/b/c/d.conf`, "`d.conf`" is the path name.
+  name_ that is expected by the app being configured. For example, if your app expects a
+  config file at `a/b/c/d.conf`, "`d.conf`" is the path name.
 
 When invoking `symconf` with specific scheme and palette settings (see more in Usage),
 appropriate config files can be matched based on how you've named your files.

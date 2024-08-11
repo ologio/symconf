@@ -1,21 +1,38 @@
+'''
+Get the config map for a provided app.
+
+The config map is a dict mapping from config file **path names** to their absolute
+path locations. That is,
+
+```sh
+<config_path_name> -> <config_dir>/apps/<app_name>/<subdir>/<palette>-<scheme>.<config_path_name>
+```
+
+For example,
+
+```
+palette1-light.conf.ini -> ~/.config/symconf/apps/user/palette1-light.conf.ini
+palette2-dark.app.conf -> ~/.config/symconf/apps/generated/palette2-dark.app.conf
+```
+
+This ensures we have unique config names pointing to appropriate locations (which
+is mostly important when the same config file names are present across ``user``
+and ``generated`` subdirectories; unique path names need to be resolved to unique
+path locations).
+'''
 import os
-import re
-import json
-import stat
-import inspect
 import tomllib
-import argparse
-import subprocess
 from pathlib import Path
 
 from colorama import Fore, Back, Style
 
 from symconf import util
-from symconf.reader import DictReader
+from symconf.util import printc, color_text
 
+from symconf.runner import Runner
+from symconf.template import FileTemplate, TOMLTemplate
+from symconf.matching import Matcher, FilePart
 
-def y(t):
-    return Style.RESET_ALL + Fore.BLUE + t + Style.RESET_ALL
 
 class ConfigManager:
     def __init__(
@@ -39,19 +56,21 @@ class ConfigManager:
 
         self.config_dir = util.absolute_path(config_dir)
         self.apps_dir   = Path(self.config_dir, 'apps')
+        self.group_dir  = Path(self.config_dir, 'groups')
 
         self.app_registry = {}
+        self.matcher = Matcher()
+        self.runner  = Runner()
 
-        self._check_paths()
-
+        self._check_dirs()
         if not disable_registry:
             self._check_registry()
 
-    def _check_paths(self):
+    def _check_dirs(self):
         '''
-        Check necessary paths for existence.
+        Check necessary config directories for existence.
 
-        Regardless of programmatic use or ``disable_registry``, we need to a valid
+        Regardless of programmatic use or ``disable_registry``, we need a valid
         ``config_dir`` and it must have an ``apps/`` subdirectory (otherwise there are
         simply no files to act on, not even when manually providing app settings).
         '''
@@ -68,291 +87,209 @@ class ConfigManager:
             )
 
     def _check_registry(self):
+        '''
+        Check the existence and format of the registry file
+        ``<config_dir>/app_registry.toml``.
+
+        All that's needed to pass the format check is the existence of the key `"app"` in
+        the registry dict. If this isn't present, the TOML file is either incorrectly
+        configured, or it's empty and there are no apps to operate on.
+        '''
         registry_path = Path(self.config_dir, 'app_registry.toml')
 
         if not registry_path.exists():
-            print(
-                Fore.YELLOW \
-                + f'No registry file found at expected location "{registry_path}"'
+            printc(
+                f'No registry file found at expected location "{registry_path}"',
+                Fore.YELLOW
             )
             return
 
         app_registry = tomllib.load(registry_path.open('rb'))
 
         if 'app' not in app_registry:
-            print(
-                Fore.YELLOW \
-                + f'Registry file found but is either empty or incorrectly formatted (no "app" key).'
+            printc(
+                'Registry file found but is either empty or incorrectly formatted (no "app" key).',
+                Fore.YELLOW
             )
 
         self.app_registry = app_registry.get('app', {})
 
     def _resolve_group(self, group, value='auto'):
+        '''
+        Resolve group inputs to concrete values.
+
+        This method is mostly meant to handle values like ``auto`` which can be provided
+        by the user, but need to be interpreted in the system context (e.g., either
+        resolving to "any" or using the app's currently set option from the cache).
+        '''
         if value == 'auto':
             # look group up in app cache and set to current value
             return 'any'
 
         return value
 
-    def _run_script(
+    def _symlink_paths(
         self,
-        script,
+        to_symlink: list[tuple[Path, Path]],
     ):
-        script_path = Path(script)
-        if script_path.stat().st_mode & stat.S_IXUSR == 0:
-            print(
-                f'{y("│")}' + Fore.RED + Style.DIM \
-                + f'  > script "{script_path.relative_to(self.config_dir)}" missing execute permissions, skipping'
-            )
-            return
-
-        print(f'{y("│")}' + Fore.BLUE + Style.DIM + f'  > running script "{script_path.relative_to(self.config_dir)}"')
-
-        output = subprocess.check_output(str(script_path), shell=True)
-        if output:
-            fmt_output = output.decode().strip().replace('\n',f'\n{y("│")}    ')
-            print(
-                f'{y("│")}' + \
-                Fore.BLUE + Style.DIM + \
-                f'  > captured script output "{fmt_output}"' \
-                + Style.RESET_ALL
-            )
-
-    def app_config_map(self, app_name) -> dict[str, Path]:
         '''
-        Get the config map for a provided app.
+        Symlink paths safely from target paths to internal config paths 
 
-        The config map is a dict mapping from config file **path names** to their absolute
-        path locations. That is, 
+        This method upholds the consistent symlink model: target locations are only
+        symlinked from if they don't exist or are already a symlink. We never overwrite
+        any concrete files, preventing accidental deletion of config files. This means
+        users must physically delete/move their existing configs into a ``symconf`` config
+        directory if they want it to be managed; otherwise, we don't touch it.
 
-        ```sh
-        <config_path_name> -> <config_dir>/apps/<app_name>/<subdir>/<palette>-<scheme>.<config_path_name>
-        ```
-
-        For example,
-
-        ```
-        palette1-light.conf.ini -> ~/.config/symconf/apps/user/palette1-light.conf.ini
-        palette2-dark.app.conf -> ~/.config/symconf/apps/generated/palette2-dark.app.conf
-        ```
-
-        This ensures we have unique config names pointing to appropriate locations (which
-        is mostly important when the same config file names are present across ``user``
-        and ``generated`` subdirectories).
+        Parameters:
+            to_symlink: path pairs to symlink, from target (external) path to source
+                        (internal) path
         '''
-        # first look in "generated", then overwrite with "user"
-        file_map = {}
-        user_app_dir = Path(self.apps_dir, app_name, 'user')
-
-        if user_app_dir.is_dir():
-            for conf_file in user_app_dir.iterdir():
-                file_map[conf_file.name] = conf_file
-
-        return file_map
-
-    def _get_file_parts(self, pathnames):
-        # now match theme files in order of inc. specificity; for each unique config file
-        # tail, only the most specific matching file sticks
-        file_parts = []
-        for pathname in pathnames:
-            parts = str(pathname).split('.')
-
-            if len(parts) < 2:
-                print(f'Filename "{pathname}" incorrectly formatted, ignoring')
+        links_succ = []
+        links_fail = []
+        for from_path, to_path in to_symlink:
+            if not to_path.exists():
+                print(f'Internal config path "{to_path}" doesn\'t exist, skipping')
+                links_fail.append((from_path, to_path))
                 continue
 
-            theme_part, conf_part = parts[0], '.'.join(parts[1:])
-            file_parts.append((theme_part, conf_part, pathname))
-
-        return file_parts
-
-    def _get_prefix_order(
-        self, 
-        scheme,
-        palette,
-        strict=False,
-    ):
-        if strict:
-            theme_order = [
-                (palette, scheme),
-            ]
-        else:
-            # inverse order of match relaxation; intention being to overwrite with
-            # results from increasingly relevant groups given the conditions
-            if palette == 'any' and scheme == 'any':
-                # prefer both be "none", with preference for specific scheme
-                theme_order = [
-                    (palette , scheme),
-                    (palette , 'none'),
-                    ('none'  , scheme),
-                    ('none'  , 'none'),
-                ]
-            elif palette == 'any':
-                # prefer palette to be "none", then specific, then relax specific scheme
-                # to "none"
-                theme_order = [
-                    (palette , 'none'),
-                    ('none'  , 'none'),
-                    (palette , scheme),
-                    ('none'  , scheme),
-                ]
-            elif scheme == 'any':
-                # prefer scheme to be "none", then specific, then relax specific palette
-                # to "none"
-                theme_order = [
-                    ('none'  , scheme),
-                    ('none'  , 'none'),
-                    (palette , scheme),
-                    (palette , 'none'),
-                ]
+            # if config file being symlinked exists & isn't already a symlink (i.e.,
+            # previously set by this script), throw an error.
+            if from_path.exists() and not from_path.is_symlink():
+                printc(
+                    f'Symlink target "{from_path}" exists and isn\'t a symlink, NOT overwriting; '
+                    f'please first manually remove this file so a symlink can be set.',
+                    Fore.RED 
+                )
+                links_fail.append((from_path, to_path))
+                continue
             else:
-                # neither component is any; prefer most specific
-                theme_order = [
-                    ('none'  , 'none'),
-                    ('none'  , scheme),
-                    (palette , 'none'),
-                    (palette , scheme),
-                ]
+                # if path doesn't exist, or exists and is symlink, remove the symlink in
+                # preparation for the new symlink setting
+                from_path.unlink(missing_ok=True)
 
-        return theme_order
+            # create parent directory if doesn't exist
+            from_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def match_pathnames(
-        self, 
-        pathnames,
-        scheme,
-        palette,
-        prefix_order=None,
-        strict=False,
-    ):
-        '''
-        Find and return matches along the "match trajectory."
-        '''
-        file_parts = self._get_file_parts(pathnames)
+            from_path.symlink_to(to_path)
+            links_succ.append((from_path, to_path))
 
-        if prefix_order is None:
-            prefix_order = self._get_prefix_order(
-                scheme,
-                palette,
-                strict=strict,
+        # link report
+        for from_p, to_p in links_succ:
+            from_p = util.to_tilde_path(from_p)
+            to_p   = to_p.relative_to(self.config_dir)
+            print(
+                color_text("│", Fore.BLUE),
+                color_text(
+                    f' > linked {color_text(from_p,Style.BRIGHT)} -> {color_text(to_p,Style.BRIGHT)}',
+                    Fore.GREEN
+                )
             )
 
-        ordered_matches = []
-        for i, (palette_prefix, scheme_prefix) in enumerate(prefix_order):
-            for theme_part, conf_part, pathname in file_parts:
-                theme_split  = theme_part.split('-')
-                scheme_part  = theme_split[-1]
-                palette_part = '-'.join(theme_split[:-1])
+        for from_p, to_p in links_fail:
+            from_p = util.to_tilde_path(from_p)
+            to_p   = to_p.relative_to(self.config_dir)
+            print(
+                color_text("│", Fore.BLUE),
+                color_text(
+                    f' > failed to link {from_p} -> {to_p}',
+                    Fore.RED
+                )
+            )
 
-                palette_match = palette_prefix == palette_part or palette_prefix == 'any'
-                scheme_match = scheme_prefix == scheme_part or scheme_prefix == 'any'
-                if palette_match and scheme_match:
-                    ordered_matches.append((conf_part, theme_part, pathname, i+1))
-
-        return ordered_matches
-
-    def _get_relaxed_set(
-        self,
-        match_list
-    ):
-        '''
-        Mostly to filter "any" matches, latching onto a particular result and getting
-        only its relaxed variants.
-
-        Note that palette-scheme files can be named ``<variant>-<palette>-<scheme>``
-        '''
-        if not match_list:
-            return []
-
-        match = match_list[-1]
-        theme_split = match[1].split('-')
-        palette_tgt, scheme_tgt = '-'.join(theme_split[:-1]), theme_split[-1]
-
-        relaxed_map = {}
-        for conf_part, theme_part, pathname, idx in match_list:
-            #theme_split  = theme_part.split('-')[::-1]
-            #scheme_part  = theme_split[0]
-            #palette_part = theme_split[1]
-            theme_split  = theme_part.split('-')
-            scheme_part  = theme_split[-1]
-            palette_part = '-'.join(theme_split[:-1])
-            #pvar_part    = '-'.join(theme_split[2:])
-
-            palette_match = palette_part == palette_tgt or palette_part == 'none'
-            scheme_match = scheme_part == scheme_tgt or scheme_part == 'none'
-
-            if palette_match and scheme_match:
-                relaxed_map[pathname] = (conf_part, theme_part, pathname, idx)
-
-        return list(relaxed_map.values())
-
-    def _stack_toml(
-        self,
-        path_list
-    ):
-        stacked_dict = {}
-        for toml_path in path_list:
-            updated_map = tomllib.load(toml_path.open('rb'))
-            stacked_dict = util.deep_update(stacked_dict, updated_map)
-
-        return stacked_dict
-
-    def template_fill(
-        self,
-        template_str  : str,
-        template_dict : dict,
-        pattern       : str = r'f{{(\S+)}}',
-    ):
-        dr = DictReader.from_dict(template_dict)
-        return re.sub(
-            pattern,
-            lambda m:str(dr.get(m.group(1))),
-            template_str
-        )
-
-    def get_matching_group_dict(
+    def _matching_template_groups(
         self, 
-        scheme='auto',
-        palette='auto',
+        scheme = 'auto',
+        style  = 'auto',
         **kw_groups,
-    ) -> dict:
+    ) -> tuple[dict, list[FilePart]]:
         '''
-        Note that "strictness" doesn't really apply in this setting. In the config
-        matching setting, setting strict means there's no relaxation to "none," but here,
-        any "none" group files just help fill any gaps (but are otherwise totally
-        overwritten, even if matched, by more precise matches). You can match ``nones``
-        directly if you want as well. ``get_matching_scripts()`` is similar in this sense.
+        Find matching template files for provided template groups.
+
+        For template groups other than "scheme" and "style," this method performs a
+        basic search for matching filenames in the respective group directory. For
+        example, a KW group like ``font = "mono"`` would look for ``font/mono.toml`` (as
+        well as the relaxation ``font/none.toml``). These template TOML files are stacked
+        and ultimately presented to downstream config templates to be filled. Note how
+        there is no dependence on the scheme during the filename match (e.g., we don't
+        look for ``font/mono-dark.toml``).
+
+        For "scheme" and "style," we have slightly different behavior, more closely
+        aligning with the non-template matching. We don't have "scheme" and "style"
+        template folders, but a single "theme" folder, within which we match template
+        files just the same as we do for non-template config files. That is, we will look
+        for files of the format
+
+        ```sh
+        <style>-<scheme>.toml
+        ```
+
+        The only difference is that, while ``style`` can still include arbitrary style
+        variants, it *must* have the form
+
+        ```sh
+        <variant-1>-...-<variant-N>-<palette>
+        ```
+        
+        if you want to match a ``palette`` template. Palettes are like regular template
+        groups, and should be placed in their own template folder. But when applying those
+        palette colors, they almost always need to be coupled with a scheme setting (e.g.,
+        "solarized-dark"). This is the one place where the templating system allows
+        "intermediate templates:" raw palette colors can fill theme templates, which then
+        fill user config templates.
+
+        So in summary: palette files can be used to populate theme templates by providing a
+        style string that matches the format ``<variant>-<palette>``. The ``<palette>``
+        will be extracted and used to match filenames in the palette template folder. The
+        term ``<variant>-<palette>-<scheme>`` will be used to match templates in the theme
+        folder, where ``<variant>-<palette> = <style>`` and ``<scheme>`` are independently
+        specifiable with supported for ``auto``, ``none``, etc.
+
+        Note that "strictness" doesn't really apply in this setting. In the non-template
+        config matching setting, setting strict means there's no relaxation to "none," but
+        here, any "none" group template files just help fill any gaps (but are otherwise
+        totally overwritten, even if matched, by more precise matches). You can match
+        ``nones`` directly if you want by specifying that directly.
+        ``get_matching_scripts()`` is similar in this sense.
         '''
-        scheme  = self._resolve_group('scheme', scheme)
-        palette = self._resolve_group('palette', palette)
+        scheme = self._resolve_group('scheme', scheme)
+        style  = self._resolve_group('style', style)
+
         groups = {
             k : self._resolve_group(k, v)
             for k, v in kw_groups.items()
         }
-        # palette lookup will behave like other groups
-        groups['palette'] = palette.split('-')[-1]
 
-        group_dir = Path(self.config_dir, 'groups')
-        if not group_dir.exists():
+        if not self.group_dir.exists():
             return {}, []
 
-        # handle non-palette-scheme groups
+        # palette lookup will behave like other groups; strip it out of the `style` string
+        # and it to the keyword groups to be searched regularly (but only if the palette
+        # group exists)
+        if Path(self.group_dir, 'palette').exists():
+            palette = style.split('-')[-1]
+            groups['palette'] = palette
+
+        # handle individual groups (not part of joint style-scheme)
         group_matches = {}
         for fkey, fval in groups.items():
-            key_group_dir = Path(group_dir, fkey)
+            key_group_dir = Path(self.group_dir, fkey)
 
             if not key_group_dir.exists():
-                print(f'Group directory {fkey} doesn\'t exist, skipping')
+                print(f'Group directory "{fkey}" doesn\'t exist, skipping')
                 continue
 
             # mirror matching scheme: 1) prefix order, 2) full enumeration, 3) select
             # best, 4) make unique, 5) ordered relaxation
             stem_map = {path.stem : path for path in key_group_dir.iterdir()}
 
+            # 1) establish prefix order
             if fval == 'any':
                 prefix_order = [fval, 'none']
             else:
                 prefix_order = ['none', fval]
 
+            # 2) fully enumerate matches, including "any"
             matches = []
             for prefix in prefix_order:
                 for stem in stem_map:
@@ -363,62 +300,71 @@ class ConfigManager:
                 # no matches for group, skip
                 continue
 
+            # 3) select best matches; done in a loop to smooth the logic, else we'd need
+            # to check if the last match is "none," and if not, find out if it was
+            # available. This alone makes the following loop more easy to follow: walk
+            # through full enumeration, and if it's the target match or "none," take the
+            # file, nicely handling the fact those may both be the same.
+            #
+            # also 4) uniqueness happening here
             match_dict = {}
-            tgt = matches[-1] # select best based on order, make new target
+            target = matches[-1] # select best based on order, make new target
             for stem in matches:
-                if stem == tgt or stem == 'none':
+                if stem == target or stem == 'none':
                     match_dict[stem] = stem_map[stem]
 
             group_matches[fkey] = list(match_dict.values())
 
         # first handle scheme maps; matching palette files should already be found in the
-        # regular group matching process
-        palette_dict = self._stack_toml(group_matches.get('palette', []))
+        # regular group matching process. This is the one template group that gets nested
+        # treatment
+        palette_dict = TOMLTemplate.stack_toml(group_matches.get('palette', []))
 
         # then palette-scheme groups (require 2-combo logic)
-        scheme_group_dir = Path(group_dir, 'scheme')
-        scheme_pathnames = [path.name for path in scheme_group_dir.iterdir()]
-        ordered_matches = self.match_pathnames(
-            scheme_pathnames,
-            scheme,
-            palette,
-        )
-        relaxed_matches = self._get_relaxed_set(ordered_matches)
+        theme_matches = []
+        theme_group_dir = Path(self.group_dir, 'theme')
 
-        scheme_dict = {}
-        for conf_part, theme_part, toml_path, _ in relaxed_matches:
-            toml_str = Path(scheme_group_dir, toml_path).open('r').read()
-            filled_toml = self.template_fill(toml_str, palette_dict)
+        if theme_group_dir.exists():
+            theme_matches = self.matcher.match_paths(
+                theme_group_dir.iterdir(),               # match files in groups/theme/
+                self.matcher.prefix_order(scheme, style) # reg non-template order
+            )
 
-            toml_dict = tomllib.loads(filled_toml)
-            scheme_dict = util.deep_update(scheme_dict, toml_dict)
+        # 5) final match relaxation
+        relaxed_theme_matches = self.matcher.relaxed_match(theme_matches)
+
+        theme_dict = {}
+        for file_part in relaxed_theme_matches:
+            toml_dict = TOMLTemplate(file_part.path).fill(palette_dict)
+            theme_dict = util.deep_update(theme_dict, toml_dict)
 
         template_dict = {
-            group : self._stack_toml(ordered_matches)
+            group : TOMLTemplate.stack_toml(ordered_matches)
             for group, ordered_matches in group_matches.items()
         }
-        template_dict['scheme'] = scheme_dict
+        template_dict['theme'] = theme_dict
 
-        return template_dict, relaxed_matches
+        return template_dict, relaxed_theme_matches
 
     def get_matching_configs(
         self, 
         app_name,
-        scheme='auto',
-        palette='auto',
-        strict=False,
-    ) -> dict[str, Path]:
+        scheme = 'auto',
+        style  = 'auto',
+        strict = False,
+    ) -> dict[str, FilePart]:
         '''
-        Get app config files that match the provided scheme and palette.
+        Get user-provided app config files that match the provided scheme and style
+        specifications.
 
         Unique config file path names are written to the file map in order of specificity.
-        All config files follow the naming scheme ``<palette>-<scheme>.<path-name>``,
-        where ``<palette>-<scheme>`` is the "theme part" and ``<path-name>`` is the "conf
+        All config files follow the naming scheme ``<style>-<scheme>.<path-name>``,
+        where ``<style>-<scheme>`` is the "theme part" and ``<path-name>`` is the "conf
         part." For those config files with the same "conf part," only the entry with the
         most specific "theme part" will be stored. By "most specific," we mean those
         entries with the fewest possible components named ``none``, with ties broken in
-        favor of a more specific ``palette`` (the only "tie" really possible here is when
-        ``none-<scheme>`` and ``<palette>-none`` are both available, in which case the latter
+        favor of a more specific ``style`` (the only "tie" really possible here is when
+        ``none-<scheme>`` and ``<style>-none`` are both available, in which case the latter
         will overwrite the former).
 
         .. admonition: Edge cases
@@ -426,16 +372,16 @@ class ConfigManager:
             There are a few quirks to this matching scheme that yield potentially
             unintuitive results. As a recap:
 
-            - The "theme part" of a config file name includes both a palette and a scheme
-              component. Either of those parts may be "none," which simply indicates that
-              that particular file does not attempt to change that factor. "none-light,"
-              for instance, might simply set a light background, having no effect on other
-              theme settings.
-            - Non-keyword queries for scheme and palette will always be matched exactly.
+            - The "theme part" of a config file name includes both a style (palette and
+              more) and a scheme component. Either of those parts may be "none," which
+              simply indicates that that particular file does not attempt to change that
+              factor. "none-light," for instance, might simply set a light background,
+              having no effect on other theme settings.
+            - Non-keyword queries for scheme and style will always be matched exactly.
               However, if an exact match is not available, we also look for "none" in each
               component's place. For example, if we wanted to set "solarized-light" but
               only "none-light" was available, it would still be set because we can still
-              satisfy the desire scheme (light). The same goes for the palette
+              satisfy the desire scheme (light). The same goes for the style
               specification, and if neither match, "none-none" will always be matched if
               available. Note that if "none" is specified exactly, it will be matched
               exactly, just like any other value.
@@ -443,7 +389,7 @@ class ConfigManager:
               we're okay to match any file's text for that part. For example, if I have
               two config files ``"p1-dark"`` and ``"p2-dark"``, the query for ``("any",
               "dark")`` would suggest I'd like the dark scheme but am okay with either
-              palette.
+              style.
 
             It's under the "any" keyword where possibly counter-intuitive results may come
             about. Specifying "any" does not change the mechanism that seeks to optionally
@@ -452,9 +398,9 @@ class ConfigManager:
             mode). If I query for ``("any", "dark")``, ``red-none`` will be matched
             (supposing there are no more direct matches available). Because we don't a
             match specifically for the scheme "dark," it gets relaxed to "none." But we
-            indicated we're okay to match any palette. So despite asking for a config that
-            sets a dark scheme and not caring about the palette, we end up with a config
-            that explicitly does nothing about the scheme but sets a particular palette.
+            indicated we're okay to match any style. So despite asking for a config that
+            sets a dark scheme and not caring about the style, we end up with a config
+            that explicitly does nothing about the scheme but sets a particular style.
             This matching process is still consistent with what we expect the keywords to
             do, it just slightly muddies the waters with regard to what can be matched
             (mostly due to the amount that's happening under the hood here).
@@ -466,24 +412,31 @@ class ConfigManager:
             Also: when "any" is used for a component, options with "none" are prioritized,
             allowing "any" to be as flexible and unassuming as possible (only matching a
             random specific config among the options if there is no "none" available).
+
+        Returns:
+            Dictionary 
         '''
-        app_dir = Path(self.apps_dir, app_name)
+        user_app_dir = Path(self.apps_dir, app_name, 'user')
 
-        scheme  = self._resolve_group('scheme', scheme)
-        palette = self._resolve_group('palette', palette)
-
-        app_config_map = self.app_config_map(app_name)
-
-        ordered_matches = self.match_pathnames(
-            app_config_map,
-            scheme,
-            palette,
-            strict=strict,
+        paths = []
+        if user_app_dir.is_dir():
+            paths = user_app_dir.iterdir()
+        
+        # 1) establish prefix order
+        prefix_order = self.matcher.prefix_order(
+            self._resolve_group('scheme', scheme),
+            self._resolve_group('style', style),
+            strict=strict
         )
 
-        matching_file_map = {}
-        for conf_part, theme_part, pathname, idx in ordered_matches:
-            matching_file_map[conf_part] = (app_config_map[pathname], idx)
+        # 2) match enumeration
+        ordered_matches = self.matcher.match_paths(paths, prefix_order)
+
+        # 3) make unique (by pathname)
+        matching_file_map = {
+            file_part.conf : file_part
+            for file_part in ordered_matches
+        }
 
         return matching_file_map
 
@@ -491,17 +444,18 @@ class ConfigManager:
         self,
         app_name,
         scheme='auto',
-        palette='auto',
+        style='auto',
         **kw_groups,
-    ) -> dict:
-        template_dict, relaxed_matches = self.get_matching_group_dict(
+    ) -> tuple[dict[str, Path], dict, list[FilePart], int]:
+        template_dict, theme_matches = self._matching_template_groups(
             scheme=scheme,
-            palette=palette,
+            style=style,
             **kw_groups,
         )
+
         max_idx = 0
-        if relaxed_matches:
-            max_idx = max([m[3] for m in relaxed_matches])
+        if theme_matches:
+            max_idx = max([fp.index for fp in theme_matches])
 
         template_map = {}
         template_dir = Path(self.apps_dir, app_name, 'templates')
@@ -509,21 +463,21 @@ class ConfigManager:
             for template_file in template_dir.iterdir():
                 template_map[template_file.name] = template_file
 
-        return template_map, template_dict, relaxed_matches, max_idx
+        return template_map, template_dict, theme_matches, max_idx
 
     def get_matching_scripts(
         self,
         app_name,
         scheme='any',
-        palette='any',
-    ) -> list:
+        style='any',
+    ) -> list[FilePart]:
         '''
         Execute matching scripts in the app's ``call/`` directory.
 
-        Scripts need to be placed in 
+        Scripts need to be placed in
 
         ```sh
-        <config_dir>/apps/<app_name>/call/<palette>-<scheme>.sh
+        <config_dir>/apps/<app_name>/call/<style>-<scheme>.sh
         ```
 
         and are matched using the same heuristic employed by config file symlinking
@@ -537,36 +491,33 @@ class ConfigManager:
         '''
         app_dir  = Path(self.apps_dir, app_name)
         call_dir = Path(app_dir, 'call')
-        
+
         if not call_dir.is_dir():
             return []
 
         prefix_order = [
-            ('none'  , 'none'),
-            ('none'  , scheme),
-            (palette , 'none'),
-            (palette , scheme),
+            ('none', 'none'),
+            ('none', scheme),
+            (style,  'none'),
+            (style,  scheme),
         ]
 
-        pathnames = [path.name for path in call_dir.iterdir()]
-        ordered_matches = self.match_pathnames(
-            pathnames,
-            scheme,
-            palette,
+        script_matches = self.matcher.match_paths(
+            call_dir.iterdir(),
             prefix_order=prefix_order
         )
-        relaxed_matches = self._get_relaxed_set(ordered_matches)
+        relaxed_matches = self.matcher.relaxed_match(script_matches)
 
         # flip list to execute by decreasing specificity
-        return list(map(lambda x:Path(call_dir, x[2]), relaxed_matches))[::-1]
+        return relaxed_matches[::-1]
 
     def update_app_config(
         self,
-        app_name,
-        app_settings = None,
-        strict       = False,
-        scheme       = 'any',
-        palette      = 'any',
+        app_name     : str,
+        app_settings : dict = None,
+        scheme       : str  = 'any',
+        style        : str  = 'any',
+        strict       : bool = False,
         **kw_groups,
     ):
         '''
@@ -581,6 +532,53 @@ class ConfigManager:
 
         Note: symlinks point **from** the target location **to** the known internal config
         file; can be a little confusing.
+
+        .. admonition:: Logic overview
+
+            This method is the center point of the ConfigManager class. It unifies the
+            user and template matching, file generation, setting of symlinks, and running
+            of scripts. At a high level,
+
+            1. An app name (e.g., kitty), app settings (e.g., a ``config_dir`` or
+               ``config_map``), scheme (e.g., "dark"), and style (e.g., "soft-gruvbox")
+            2. Get matching user config files via ``get_matching_configs()``
+            3. Get matching template config files and the aggregate template dict via
+               ``get_matching_templates()``
+            4. Interleave the two the result sets by pathname and match quality. Template
+               matches are preferred in the case of tied scores. This resolves any
+               pathname clashes across matching files.
+
+               This is a particularly important step. It compares concrete config names
+               explicitly provided by the user (e.g., ``soft-gruvbox-dark.kitty.conf``)
+               with named TOML files in a group directory (e.g,.
+               ``theme/soft-gruvbox-dark.toml``). We have to determine whether the
+               available templates constitute a better match than the best user option,
+               which is done by comparing the level in the prefix order (the index)
+               where the match takes place.
+
+               Templates are generally more flexible, and other keywords may also provide
+               a matching template group (e.g., ``-T font=mono`` to match some
+               font-specific settings). When the match is otherwise equally good (e.g.,
+               both style and scheme match directly), we prefer the template due to its
+               general portability and likelihood of being more up-to-date. We also don't
+               explicitly use the fact auxiliary template groups might be matched by the
+               user's input: we only compare the user and template configs on the basis of
+               the quality of the style-scheme match. This effectively means additional
+               template groups (e.g., font) don't "count" if the basis style-scheme
+               doesn't win over a user config file. There could be an arbitrary number of
+               other template group matches, but they don't contribute to the match
+               quality. For instance, a concrete user config ``solarized-dark.kitty.conf``
+               will be selected over ``solarized-none.toml`` plus 10 other matching theme
+               elements if the user asked for ``-s dark -t solarized``.
+            5. For those template matches, fill/generate the template file and place it in
+               the app's ``generated/`` directory.
+
+        Parameters:
+            app_name: name of the app whose config files should be updated
+            app_settings: dict of app settings (i.e., ``config_dir`` or ``config_map``)
+            scheme: scheme spec
+            style: style spec
+            strict: whether to match ``scheme`` and ``style`` strictly 
         '''
         if app_settings is None:
             app_settings = self.app_registry.get(app_name, {})
@@ -589,136 +587,105 @@ class ConfigManager:
             print(f'App "{app_name}" incorrectly configured, skipping')
             return
 
-        # merge templates and user-provided configs
-        template_map, template_dict, template_matches, tidx = self.get_matching_templates(
-            app_name,
-            scheme=scheme,
-            palette=palette,
-            **kw_groups
-        )
-        # set file map to user configs if yields a strictly better match
+        # match both user configs and templates
+        # -> "*_map" are dicts from config pathnames to FilePart / Paths
         config_map = self.get_matching_configs(
             app_name,
             scheme=scheme,
-            palette=palette,
+            style=style,
             strict=strict,
         )
-        
-        # tuples of 1) full paths and 2) whether to fill template
+        template_map, template_dict, theme_matches, tidx = self.get_matching_templates(
+            app_name,
+            scheme=scheme,
+            style=style,
+            **kw_groups
+        )
+
+        # create "generated" directory for the app
         generated_path = Path(self.apps_dir, app_name, 'generated')
         generated_path.mkdir(parents=True, exist_ok=True)
 
-        # flatten matches
-        generated_paths  = [m[2] for m in template_matches]
-        generated_config = {}
+        # track selected configs with a pathname -> fullpath map 
+        final_config_map = {}
+        # tracker for template configs that were generated
+        generated_config = []
 
-        file_map = {}
-        for tail, full_path in template_map.items():
-            # use config only if strictly better match
-            # the P-S match forms rules the match quality; if additional args from
-            # templates (e.g. "font") match available groups but there is still a better
-            # P-S match in "user/", it will beat out the template (b/c the "user" config
-            # is concrete). If they're on the same level, prefer the template match for
-            # flexibility (guarantees same P-S match and extra group customization).
-            if tail in config_map and config_map[tail][1] > tidx:
-                file_map[tail] = config_map[tail][0]
+        # interleave user and template matches
+        for pathname, full_path in template_map.items():
+            if pathname in config_map and config_map[pathname].index > tidx:
+                final_config_map[pathname] = config_map[pathname].path
             else:
-                template_str = full_path.open('r').read()
-                filled_template = self.template_fill(template_str, template_dict)
+                config_path = Path(generated_path, pathname)
+                config_path.write_text(
+                    FileTemplate(full_path).fill(template_dict)
+                )
+                final_config_map[pathname] = config_path
+                generated_config.append(pathname)
 
-                config_path = Path(generated_path, tail)
-                config_path.write_text(filled_template)
-                file_map[tail] = config_path
+        # fill in any config matches not added to final_config_map above
+        for pathname, file_part in config_map.items():
+            if pathname not in final_config_map:
+                final_config_map[pathname] = file_part.path
 
-                generated_config[tail] = generated_paths
-
-        for tail, (full_path, idx) in config_map.items():
-            if tail not in file_map:
-                file_map[tail] = full_path
-
+        # prepare symlinks (inverse loop and conditional order is sloppier)
         to_symlink: list[tuple[Path, Path]] = []
         if 'config_dir' in app_settings:
-            for config_tail, full_path in file_map.items():
+            config_dir = util.absolute_path(app_settings['config_dir'])
+            for ext_pathname, int_fullpath in final_config_map.items():
+                ext_fullpath = Path(config_dir, ext_pathname)
                 to_symlink.append((
-                    util.absolute_path(Path(app_settings['config_dir'], config_tail)), # point from real config dir
-                    full_path, # to internal config location
+                    ext_fullpath, # point from external config dir
+                    int_fullpath, # to internal config location
                 ))
         elif 'config_map' in app_settings:
-            for config_tail, full_path in file_map.items():
-                # app's config map points config tails to absolute paths
-                if config_tail in app_settings['config_map']:
+            for ext_pathname, int_fullpath in final_config_map.items():
+                # app's config map points config pathnames to absolute paths
+                if ext_pathname in app_settings['config_map']:
+                    ext_fullpath = util.absolute_path(app_settings['config_map'][ext_pathname])
                     to_symlink.append((
-                        util.absolute_path(Path(app_settings['config_map'][config_tail])), # point from real config path
-                        full_path, # to internal config location
+                        ext_fullpath, # point from external config path
+                        int_fullpath, # to internal config location
                     ))
 
         # run matching scripts for app-specific reload
         script_list = self.get_matching_scripts(
             app_name,
             scheme=scheme,
-            palette=palette,
+            style=style,
+        )
+        script_list = list(map(lambda f:f.path, script_list))
+
+        # print match messages
+        num_links = len(to_symlink)
+        num_scripts = len(script_list)
+        print(
+            color_text("├─", Fore.BLUE),
+            f'{app_name} :: matched ({num_links}) config files and ({num_scripts}) scripts'
         )
 
-        print(
-            f'{y("├─")} ' + Fore.YELLOW + f'{app_name} :: matched ({len(to_symlink)}) config files and ({len(script_list)}) scripts'
-        )
-        for tail, gen_paths in generated_config.items():
+        rel_theme_matches = ' < '.join([
+            str(fp.path.relative_to(self.group_dir))
+            for fp in theme_matches
+        ])
+        for pathname in generated_config:
             print(
-                f'{y("│")}' + Fore.GREEN + Style.DIM + \
-                f'  > generating config "{tail}" from {gen_paths}' + Style.RESET_ALL
+                color_text("│", Fore.BLUE),
+                color_text(
+                    f' > generating config "{pathname}" from [{rel_theme_matches}]',
+                    Style.DIM
+                )
             )
 
-        links_succ = []
-        links_fail = []
-        for from_path, to_path in to_symlink:
-            if not to_path.exists():
-                print(f'Internal config path "{to_path}" doesn\'t exist, skipping')
-                links_fail.append((from_path, to_path))
-                continue
+        self._symlink_paths(to_symlink)
+        self.runner.run_many(script_list)
 
-            # if config file being symlinked exists & isn't already a symlink (i.e.,
-            # previously set by this script), throw an error. 
-            if from_path.exists() and not from_path.is_symlink():
-                print(
-                    Fore.RED + \
-                    f'Symlink target "{from_path}" exists and isn\'t a symlink, NOT overwriting;' \
-                    + ' please first manually remove this file so a symlink can be set.'
-                )
-                links_fail.append((from_path, to_path))
-                continue
-            else:
-                # if path doesn't exist, or exists and is symlink, remove the symlink in
-                # preparation for the new symlink setting
-                from_path.unlink(missing_ok=True)
-
-            #print(f'Linking [{from_path}] -> [{to_path}]')
-
-            # create parent directory if doesn't exist
-            from_path.parent.mkdir(parents=True, exist_ok=True)
-
-            from_path.symlink_to(to_path)
-            links_succ.append((from_path, to_path))
-
-        # link report
-        for from_p, to_p in links_succ:
-            from_p = from_p
-            to_p   = to_p.relative_to(self.config_dir)
-            print(f'{y("│")}' + Fore.GREEN + f'  > linked {from_p} -> {to_p}')
-
-        for from_p, to_p in links_fail:
-            from_p = from_p
-            to_p   = to_p.relative_to(self.config_dir)
-            print(f'{y("│")}' + Fore.RED + f'  > failed to link {from_p} -> {to_p}')
-
-        for script in script_list:
-            self._run_script(script)
-
-    def config_apps(
+    def configure_apps(
         self,
-        apps: str | list[str] = '*',
-        scheme                = 'any',
-        palette               = 'any',
-        strict=False,
+        apps   : str | list[str] = '*',
+        scheme : str             = 'any',
+        style  : str             = 'any',
+        strict : bool            = False,
         **kw_groups,
     ):
         if apps == '*':
@@ -732,10 +699,10 @@ class ConfigManager:
             print(f'None of the apps "{apps}" are registered, exiting')
             return
 
-        print('> symconf parameters: ')
-        print('  > registered apps :: ' + Fore.YELLOW + f'{app_list}' + Style.RESET_ALL)
-        print('  > palette         :: ' + Fore.YELLOW + f'{palette}'  + Style.RESET_ALL)
-        print('  > scheme          :: ' + Fore.YELLOW + f'{scheme}\n' + Style.RESET_ALL)
+        print(f'> symconf parameters: ')
+        print(f'  > registered apps :: {color_text(app_list, Fore.YELLOW)}')
+        print(f'  > style           :: {color_text(style, Fore.YELLOW)}')
+        print(f'  > scheme          :: {color_text(scheme, Fore.YELLOW)}\n')
 
         for app_name in app_list:
             app_dir = Path(self.apps_dir, app_name)
@@ -747,57 +714,53 @@ class ConfigManager:
                 app_name,
                 app_settings=self.app_registry[app_name],
                 scheme=scheme,
-                palette=palette,
+                style=style,
                 strict=False,
                 **kw_groups,
             )
+
+    def _app_action(
+        self,
+        script_pathname,
+        apps: str | list[str] = '*',
+    ):
+        '''
+        Execute a static script-based action for a provided set of apps.
+
+        Mostly a helper method for install and update actions, calling a static script
+        name under each app's directory.
+        '''
+        if apps == '*':
+            # get all registered apps
+            app_list = list(self.app_registry.keys())
+        else:
+            # get requested apps that overlap with registry
+            app_list = [a for a in apps if a in self.app_registry]
+
+        if not app_list:
+            print(f'None of the apps "{apps}" are registered, exiting')
+            return
+
+        print(
+            f'> symconf parameters: '
+            f'  > registered apps :: {color_text(app_list, Fore.YELLOW)}'
+        )
+
+        for app_name in app_list:
+            target_script = Path(self.apps_dir, app_name, script_pathname)
+            if not target_script.exists():
+                continue
+
+            self.runner.run_script(target_script)
 
     def install_apps(
         self,
         apps: str | list[str] = '*',
     ):
-        if apps == '*':
-            # get all registered apps
-            app_list = list(self.app_registry.keys())
-        else:
-            # get requested apps that overlap with registry
-            app_list = [a for a in apps if a in self.app_registry]
-
-        if not app_list:
-            print(f'None of the apps "{apps}" are registered, exiting')
-            return
-
-        print('> symconf parameters: ')
-        print('  > registered apps :: ' + Fore.YELLOW + f'{app_list}' + Style.RESET_ALL)
-
-        for app_name in app_list:
-            install_script = Path(self.apps_dir, app_name, 'install.sh')
-            if not install_script.exists():
-                continue
-
-            self._run_script(install_script)
+        self._app_action('install.sh', apps)
 
     def update_apps(
         self,
         apps: str | list[str] = '*',
     ):
-        if apps == '*':
-            # get all registered apps
-            app_list = list(self.app_registry.keys())
-        else:
-            # get requested apps that overlap with registry
-            app_list = [a for a in apps if a in self.app_registry]
-
-        if not app_list:
-            print(f'None of the apps "{apps}" are registered, exiting')
-            return
-
-        print('> symconf parameters: ')
-        print('  > registered apps :: ' + Fore.YELLOW + f'{app_list}' + Style.RESET_ALL)
-
-        for app_name in app_list:
-            update_script = Path(self.apps_dir, app_name, 'update.sh')
-            if not update_script.exists():
-                continue
-
-            self._run_script(update_script)
+        self._app_action('update.sh', apps)
