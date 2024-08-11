@@ -35,7 +35,7 @@ def add_update_subparser(subparsers):
     parser.add_argument(
         '-a', '--apps',
         required = False,
-        default  = "*",
+        default  = '*',
         type     = lambda s: s.split(',') if s != '*' else s,
         help     = 'Application target for theme. App must be present in the registry. ' \
                  + 'Use "*" to apply to all registered apps'
@@ -56,16 +56,17 @@ def add_config_subparser(subparsers):
         description='Set config files for registered applications.'
     )
     parser.add_argument(
-        '-p', '--palette',
+        '-s', '--style',
         required = False,
-        default  = "any",
-        help     = 'Palette name, must match a folder in themes/'
+        default  = 'any',
+        help     = 'Style indicator (often a color palette) capturing thematic details in '
+                   'a config file'
     )
     parser.add_argument(
-        '-s', '--scheme',
+        '-m', '--mode',
         required = False,
         default  = "any",
-        help     = 'Preferred lightness scheme, either "light" or "dark".'
+        help     = 'Preferred lightness mode/scheme, either "light," "dark," "any," or "none."'
     )
     parser.add_argument(
         '-a', '--apps',
