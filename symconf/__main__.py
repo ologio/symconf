@@ -47,8 +47,8 @@ def add_config_subparser(subparsers):
         cm = ConfigManager(args.config_dir)
         cm.configure_apps(
             apps=args.apps,
-            scheme=args.scheme,
-            style=args.palette,
+            scheme=args.mode,
+            style=args.style,
         )
 
     parser = subparsers.add_parser(
