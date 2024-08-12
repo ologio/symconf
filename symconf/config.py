@@ -832,9 +832,11 @@ class ConfigManager:
 
             app_template_files = list(app_template_dir.iterdir())
 
+            num_temps  = len(app_template_files)
+            num_themes = len(theme_map)
             print(
                 color_text("├─", Fore.BLUE),
-                f'{app_name} :: generating ({len(app_template_files)}) template files'
+                f'{app_name} :: generating ({num_temps}) templates from ({num_themes}) themes'
             )
 
             for template_file in app_template_files:

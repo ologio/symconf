@@ -46,11 +46,11 @@ registered locations. When necessary, `symconf` will also match and execute scri
 reload apps after updating their configuration.
 
 You can find more details on how `symconf`'s matching scheme works in
-[Matching](docs/reference/matching).
+[Matching](docs/reference/matching.md).
 
 # Configuring
 Before using, you must first set up your config directory to house your config files and
-give `symconf` something to act on. See [Configuring](docs/reference/configuring) for
+give `symconf` something to act on. See [Configuring](docs/reference/configuring.md) for
 details.
 
 # Installation
