@@ -346,6 +346,45 @@ class ConfigManager:
 
         return template_dict, relaxed_theme_matches
 
+    def _prepare_all_templates(self) -> dict[str, dict]:
+        palette_map = {}
+        palette_group_dir = Path(self.group_dir, 'palette')
+        if palette_group_dir.exists():
+            for palette_path in palette_group_dir.iterdir():
+                palette_map[palette_path.stem] = palette_path
+
+        palette_base = []
+        if 'none' in palette_map:
+            palette_base.append(palette_map['none'])
+
+        # then palette-scheme groups (require 2-combo logic)
+        theme_map = {}
+        theme_group_dir = Path(self.group_dir, 'theme')
+        if theme_group_dir.exists():
+            for theme_toml in theme_group_dir.iterdir():
+                fp = FilePart(theme_toml)
+
+                theme_matches = self.matcher.match_paths(
+                    theme_group_dir.iterdir(),               # match files in groups/theme/
+                    self.matcher.prefix_order(fp.scheme, fp.style) # reg non-template order
+                )
+                relaxed_theme_matches = self.matcher.relaxed_match(theme_matches)
+
+                palette = fp.style.split('-')[-1]
+                palette_paths = [*palette_base]
+                if palette in palette_map:
+                    palette_paths.append(palette_map[palette])
+
+                theme_dict = {}
+                palette_dict = TOMLTemplate.stack_toml(palette_paths)
+                for file_part in relaxed_theme_matches:
+                    toml_dict = TOMLTemplate(file_part.path).fill(palette_dict)
+                    theme_dict = util.deep_update(theme_dict, toml_dict)
+
+                theme_map[fp.path.stem] = {'theme': theme_dict}
+
+        return theme_map
+
     def get_matching_configs(
         self, 
         app_name,
@@ -764,3 +803,55 @@ class ConfigManager:
         apps: str | list[str] = '*',
     ):
         self._app_action('update.sh', apps)
+
+    def generate_app_templates(
+        self,
+        gen_dir : str | Path,
+        apps    : str | list[str] = '*',
+    ):
+        if apps == '*':
+            app_list = list(self.app_registry.keys())
+        else:
+            app_list = [a for a in apps if a in self.app_registry]
+
+        if not app_list:
+            print(f'None of the apps "{apps}" are registered, exiting')
+            return
+
+        print(f'> symconf parameters: ')
+        print(f'  > registered apps :: {color_text(app_list, Fore.YELLOW)}')
+        print(f'> Writing templates...')
+
+        gen_dir = util.absolute_path(gen_dir)
+        theme_map = self._prepare_all_templates()
+
+        for app_name in app_list:
+            app_template_dir = Path(self.apps_dir, app_name, 'templates')
+            if not app_template_dir.exists():
+                continue
+
+            app_template_files = list(app_template_dir.iterdir())
+
+            print(
+                color_text("├─", Fore.BLUE),
+                f'{app_name} :: generating ({len(app_template_files)}) template files'
+            )
+
+            for template_file in app_template_files:
+                app_template = FileTemplate(template_file)
+                
+                for theme_stem, theme_dict in theme_map.items():
+                    tgt_template_dir = Path(gen_dir, app_name)
+                    tgt_template_dir.mkdir(parents=True, exist_ok=True)
+
+                    tgt_template_path = Path(
+                        tgt_template_dir,
+                        f'{theme_stem}.{template_file.name}'
+                    )
+                    filled_template = app_template.fill(theme_dict)
+                    tgt_template_path.write_text(filled_template)
+
+                    print(
+                        color_text("│", Fore.BLUE),
+                        f'> generating "{tgt_template_path.name}"'
+                    )

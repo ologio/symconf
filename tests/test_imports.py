@@ -7,5 +7,4 @@ def test_imports():
 
     from symconf import config
     from symconf import reader
-    from symconf import theme
     from symconf import util

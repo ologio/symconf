@@ -1,6 +1,7 @@
 import argparse
+from importlib.metadata import version
 
-from symconf import util
+from symconf import util, __version__
 from symconf.config import ConfigManager
 
 
@@ -85,6 +86,34 @@ def add_config_subparser(subparsers):
     )
     parser.set_defaults(func=configure_apps)
 
+def add_generate_subparser(subparsers):
+    def generate_apps(args):
+        cm = ConfigManager(args.config_dir)
+        cm.generate_app_templates(
+            gen_dir=args.gen_dir,
+            apps=args.apps,
+        )
+
+    parser = subparsers.add_parser(
+        'generate',
+        description='Generate all template config files for specified apps'
+    )
+    parser.add_argument(
+        '-g', '--gen-dir',
+        required = True,
+        type     = util.absolute_path,
+        help     = 'Path to write generated template files'
+    )
+    parser.add_argument(
+        '-a', '--apps',
+        required = False,
+        default  = "*",
+        type     = lambda s: s.split(',') if s != '*' else s,
+        help     = 'Application target for theme. App must be present in the registry. ' \
+                 + 'Use "*" to apply to all registered apps'
+    )
+    parser.set_defaults(func=generate_apps)
+
 
 # central argparse entry point
 parser = argparse.ArgumentParser(
@@ -97,12 +126,19 @@ parser.add_argument(
     type    = util.absolute_path,
     help    = 'Path to config directory'
 )
+parser.add_argument(
+    '-v', '--version',
+    action='version',
+    version=__version__,
+    help    = 'Print symconf version'
+)
 
 # add subparsers
 subparsers = parser.add_subparsers(title='subcommand actions')
+add_config_subparser(subparsers)
+add_generate_subparser(subparsers)
 add_install_subparser(subparsers)
 add_update_subparser(subparsers)
-add_config_subparser(subparsers)
 
 
 def main():
