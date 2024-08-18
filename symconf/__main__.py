@@ -50,6 +50,7 @@ def add_config_subparser(subparsers):
             apps=args.apps,
             scheme=args.mode,
             style=args.style,
+            **args.template_vars
         )
 
     parser = subparsers.add_parser(
@@ -81,6 +82,7 @@ def add_config_subparser(subparsers):
         '-T', '--template-vars',
         required = False,
         nargs='+',
+        default  = {},
         action=util.KVPair,
         help='Groups to use when populating templates, in the form group=value'
     )
@@ -90,8 +92,11 @@ def add_generate_subparser(subparsers):
     def generate_apps(args):
         cm = ConfigManager(args.config_dir)
         cm.generate_app_templates(
-            gen_dir=args.gen_dir,
+            gen_dir=args.output_dir,
             apps=args.apps,
+            scheme=args.mode,
+            style=args.style,
+            **args.template_vars
         )
 
     parser = subparsers.add_parser(
@@ -99,10 +104,23 @@ def add_generate_subparser(subparsers):
         description='Generate all template config files for specified apps'
     )
     parser.add_argument(
-        '-g', '--gen-dir',
+        '-o', '--output-dir',
         required = True,
         type     = util.absolute_path,
         help     = 'Path to write generated template files'
+    )
+    parser.add_argument(
+        '-s', '--style',
+        required = False,
+        default  = 'any',
+        help     = 'Style indicator (often a color palette) capturing thematic details in '
+                   'a config file'
+    )
+    parser.add_argument(
+        '-m', '--mode',
+        required = False,
+        default  = "any",
+        help     = 'Preferred lightness mode/scheme, either "light," "dark," "any," or "none."'
     )
     parser.add_argument(
         '-a', '--apps',
@@ -111,6 +129,14 @@ def add_generate_subparser(subparsers):
         type     = lambda s: s.split(',') if s != '*' else s,
         help     = 'Application target for theme. App must be present in the registry. ' \
                  + 'Use "*" to apply to all registered apps'
+    )
+    parser.add_argument(
+        '-T', '--template-vars',
+        required = False,
+        nargs    = '+',
+        default  = {},
+        action   = util.KVPair,
+        help     = 'Groups to use when populating templates, in the form group=value'
     )
     parser.set_defaults(func=generate_apps)
 

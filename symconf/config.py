@@ -1,19 +1,19 @@
 '''
-Get the config map for a provided app.
+Primary config management abstractions
 
 The config map is a dict mapping from config file **path names** to their absolute
 path locations. That is,
 
-```sh
-<config_path_name> -> <config_dir>/apps/<app_name>/<subdir>/<palette>-<scheme>.<config_path_name>
-```
+.. code-block:: sh
+
+    <config_path_name> -> <config_dir>/apps/<app_name>/<subdir>/<palette>-<scheme>.<config_path_name>
 
 For example,
 
-```
-palette1-light.conf.ini -> ~/.config/symconf/apps/user/palette1-light.conf.ini
-palette2-dark.app.conf -> ~/.config/symconf/apps/generated/palette2-dark.app.conf
-```
+.. code-block:: sh
+
+    palette1-light.conf.ini -> ~/.config/symconf/apps/user/palette1-light.conf.ini
+    palette2-dark.app.conf -> ~/.config/symconf/apps/generated/palette2-dark.app.conf
 
 This ensures we have unique config names pointing to appropriate locations (which
 is mostly important when the same config file names are present across ``user``
@@ -220,16 +220,16 @@ class ConfigManager:
         files just the same as we do for non-template config files. That is, we will look
         for files of the format
 
-        ```sh
-        <style>-<scheme>.toml
-        ```
+        .. code-block:: sh
+
+            <style>-<scheme>.toml
 
         The only difference is that, while ``style`` can still include arbitrary style
         variants, it *must* have the form
 
-        ```sh
-        <variant-1>-...-<variant-N>-<palette>
-        ```
+        .. code-block:: sh
+
+            <variant-1>-...-<variant-N>-<palette>
         
         if you want to match a ``palette`` template. Palettes are like regular template
         groups, and should be placed in their own template folder. But when applying those
@@ -346,7 +346,11 @@ class ConfigManager:
 
         return template_dict, relaxed_theme_matches
 
-    def _prepare_all_templates(self) -> dict[str, dict]:
+    def _prepare_all_templates(
+        self,
+        scheme = 'any',
+        style  = 'any',
+    ) -> dict[str, dict]:
         palette_map = {}
         palette_group_dir = Path(self.group_dir, 'palette')
         if palette_group_dir.exists():
@@ -358,30 +362,37 @@ class ConfigManager:
             palette_base.append(palette_map['none'])
 
         # then palette-scheme groups (require 2-combo logic)
-        theme_map = {}
+        theme_matches = []
         theme_group_dir = Path(self.group_dir, 'theme')
         if theme_group_dir.exists():
-            for theme_toml in theme_group_dir.iterdir():
-                fp = FilePart(theme_toml)
+            theme_matches = self.matcher.match_paths(
+                theme_group_dir.iterdir(),     # match files in groups/theme/
+                self.matcher.prefix_order(     # reg non-template order
+                    scheme, style, strict=True # set strict=True to ignore "nones"
+                ) 
+            )
 
-                theme_matches = self.matcher.match_paths(
-                    theme_group_dir.iterdir(),               # match files in groups/theme/
-                    self.matcher.prefix_order(fp.scheme, fp.style) # reg non-template order
-                )
-                relaxed_theme_matches = self.matcher.relaxed_match(theme_matches)
+        theme_map = {}
+        for fp in theme_matches:
+            # still look through whole theme dir here (eg to match nones)
+            theme_matches = self.matcher.match_paths(
+                theme_group_dir.iterdir(),               # match files in groups/theme/
+                self.matcher.prefix_order(fp.scheme, fp.style) # reg non-template order
+            )
+            relaxed_theme_matches = self.matcher.relaxed_match(theme_matches)
 
-                palette = fp.style.split('-')[-1]
-                palette_paths = [*palette_base]
-                if palette in palette_map:
-                    palette_paths.append(palette_map[palette])
+            palette = fp.style.split('-')[-1]
+            palette_paths = [*palette_base]
+            if palette in palette_map:
+                palette_paths.append(palette_map[palette])
 
-                theme_dict = {}
-                palette_dict = TOMLTemplate.stack_toml(palette_paths)
-                for file_part in relaxed_theme_matches:
-                    toml_dict = TOMLTemplate(file_part.path).fill(palette_dict)
-                    theme_dict = util.deep_update(theme_dict, toml_dict)
+            theme_dict = {}
+            palette_dict = TOMLTemplate.stack_toml(palette_paths)
+            for file_part in relaxed_theme_matches:
+                toml_dict = TOMLTemplate(file_part.path).fill(palette_dict)
+                theme_dict = util.deep_update(theme_dict, toml_dict)
 
-                theme_map[fp.path.stem] = {'theme': theme_dict}
+            theme_map[fp.path.stem] = {'theme': theme_dict}
 
         return theme_map
 
@@ -406,7 +417,7 @@ class ConfigManager:
         ``none-<scheme>`` and ``<style>-none`` are both available, in which case the latter
         will overwrite the former).
 
-        .. admonition: Edge cases
+        .. admonition:: Edge cases
 
             There are a few quirks to this matching scheme that yield potentially
             unintuitive results. As a recap:
@@ -515,9 +526,9 @@ class ConfigManager:
 
         Scripts need to be placed in
 
-        ```sh
-        <config_dir>/apps/<app_name>/call/<style>-<scheme>.sh
-        ```
+        .. code-block:: sh
+
+            <config_dir>/apps/<app_name>/call/<style>-<scheme>.sh
 
         and are matched using the same heuristic employed by config file symlinking
         procedure (see ``get_matching_configs()``), albeit with a forced ``prefix_order``,
@@ -808,6 +819,9 @@ class ConfigManager:
         self,
         gen_dir : str | Path,
         apps    : str | list[str] = '*',
+        scheme : str             = 'any',
+        style  : str             = 'any',
+        **kw_groups,
     ):
         if apps == '*':
             app_list = list(self.app_registry.keys())
@@ -823,7 +837,7 @@ class ConfigManager:
         print(f'> Writing templates...')
 
         gen_dir = util.absolute_path(gen_dir)
-        theme_map = self._prepare_all_templates()
+        theme_map = self._prepare_all_templates(scheme, style)
 
         for app_name in app_list:
             app_template_dir = Path(self.apps_dir, app_name, 'templates')
@@ -831,6 +845,12 @@ class ConfigManager:
                 continue
 
             app_template_files = list(app_template_dir.iterdir())
+            self.get_matching_templates(
+                app_name,
+                scheme=scheme,
+                style=style,
+                **kw_groups
+            )
 
             num_temps  = len(app_template_files)
             num_themes = len(theme_map)
@@ -855,5 +875,5 @@ class ConfigManager:
 
                     print(
                         color_text("│", Fore.BLUE),
-                        f'> generating "{tgt_template_path.name}"'
+                        f'>  generating "{tgt_template_path.name}"'
                     )

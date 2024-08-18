@@ -19,8 +19,9 @@ used when populating config file templates. Specifically, in this example, invok
   are responsive to `prefers-color-scheme`)
 - **kitty**: theme template is re-generated using the specified palette, and `kitty`
   processes are sent a message to live-reload the new config file
-- **neovim**: a `vim` theme file is generated from the chosen palette, and running
-  instances of `neovim` are sent a message to re-source this theme
+- **neovim**: a `vim` theme file (along with a statusline theme) is generated from the
+  chosen palette, and running instances of `neovim` are sent a message to re-source this
+  theme (via `nvim --remote-send`)
 - **waybar**: bar styles are updated to match the mode setting
 - **sway**: the background color and window borders are dynamically set to base palette
   colors, and `swaymsg reload` is called
@@ -73,13 +74,25 @@ You can also install via `pip`, or clone and install locally.
     all registered apps.
   * `-m --mode`: preferred lightness mode/scheme, either `light`, `dark`, `any`, or
     `none`.
-  * `-s --style`: style indicate, often the name of a color palette, capturing thematic
+  * `-s --style`: style indicator, often the name of a color palette, capturing thematic
     details in a config file to be matched. `any` or `none` are reserved keywords (see
     below).
   * `-T --template-vars`: additional groups to use when populating templates, in the form
     `<group>=<value>`, where `<group>` is a template group with a folder
     `$CONFIG_HOME/groups/<group>/` and `<value>` should correspond to a TOML file in this
     folder (i.e., `<value>.toml`).
+- `symconf generate` is a subcommand that can be used for batch generation of config
+  files. It accepts the same arguments as `symconf config`, but rather than selecting the
+  best match to be used for the system setting, all matching templates are generated.
+  There is one additional required argument:
+  * `-o --output-dir`: the directory under which generated config files should be written.
+    App-specific subdirectories are created to house config files for each provided app.
+- `symconf install`: runs install scripts for matching apps that specify one
+  * `-a --apps`: comma-separate list of registered apps, or `"*"` (default) to consider
+    all registered apps.
+- `symconf update`: runs update scripts for matching apps that specify one
+  * `-a --apps`: comma-separate list of registered apps, or `"*"` (default) to consider
+    all registered apps.
 
 The keywords `any` and `none` can be used when specifying `--mode`, `--style`, or as a
 value in `--template-vars` (and we refer to each of these variables as _factors_ that help

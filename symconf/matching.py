@@ -1,9 +1,11 @@
 '''
-Top-level definitions
+Generic combinatorial name-matching subsystem
 
 Config files are expected to have names matching the following spec:
 
-<style>-<scheme>.<config_pathname>
+.. code-block:: sh
+
+    <style>-<scheme>.<config_pathname>
 
 - ``config_pathname``: refers to a concrete filename, typically that which is expected by
   the target app (e.g., ``kitty.conf``). In the context of ``config_map`` in the registry,
@@ -15,17 +17,17 @@ Config files are expected to have names matching the following spec:
 
 For example
 
-```sh
-soft-gruvbox-dark.kitty.conf
-```
+.. code-block:: sh
+
+    soft-gruvbox-dark.kitty.conf
 
 gets mapped to 
 
-```sh
-style    -> "soft-gruvbox"
-scheme   -> "dark"
-pathname -> "kitty.conf"
-```
+.. code-block:: sh
+
+    style    -> "soft-gruvbox"
+    scheme   -> "dark"
+    pathname -> "kitty.conf"
 '''
 from pathlib import Path
 
@@ -64,9 +66,9 @@ class Matcher:
 
         Pathnames should be of the format
 
-        ```sh
-        <style>-<scheme>.<config_pathname>
-        ```
+        .. code-block:: sh
+
+            <style>-<scheme>.<config_pathname>
 
         where ``style`` is typically itself of the form ``<variant>-<palette>``.
         '''
@@ -151,12 +153,12 @@ class Matcher:
         "consistent" with some user input (and is computed external to this method). For
         example, it could be
 
-        ```py
-        [
-            ('none', 'none')
-            ('none', 'dark')
-        ]
-        ```
+        .. code-block:: python
+
+            [
+                ('none', 'none')
+                ('none', 'dark')
+            ]
 
         indicating that either ``none-none.<config>`` or ``none-dark.<config>`` would be
         considered matching pathnames, with the latter being preferred.
@@ -166,7 +168,7 @@ class Matcher:
         will be available, so we consider each file for each of the prefixes, and take the
         latest/best match for each unique config pathname (allowing for a "soft" match).
         
-        .. admonition: Checking for matches
+        .. admonition:: Checking for matches
 
             When thinking about how best to structure this method, it initially felt like
             indexing factors of the FileParts would make the most sense, preventing the

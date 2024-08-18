@@ -1,3 +1,6 @@
+'''
+Support for basic config templates
+'''
 import re
 import tomllib
 from pathlib import Path
@@ -10,10 +13,12 @@ class Template:
     def __init__(
         self,
         template_str  : str,
-        pattern       : str = r'f{{(\S+?)}}',
+        key_pattern   : str = r'f{{(\S+?)}}',
+        exe_pattern   : str = r'x{{(.*)}}',
     ):
         self.template_str = template_str
-        self.pattern = pattern
+        self.key_pattern  = key_pattern
+        self.exe_pattern  = exe_pattern
 
     def fill(
         self,
@@ -21,32 +26,66 @@ class Template:
     ) -> str:
         dr = DictReader.from_dict(template_dict)
 
-        return re.sub(
-            self.pattern,
-            lambda m: str(dr.get(m.group(1))),
+        exe_filled = re.sub(
+            self.exe_pattern,
+            lambda m: self._exe_fill(m, dr),
             self.template_str
         )
+
+        key_filled = re.sub(
+            self.key_pattern,
+            lambda m: self._key_fill(m, dr),
+            exe_filled
+        )
+
+        return key_filled
+
+    def _key_fill(
+        self,
+        match,
+        dict_reader: DictReader,
+    ) -> str:
+        key = match.group(1)
+
+        return str(dict_reader.get(key))
+
+    def _exe_fill(
+        self,
+        match,
+        dict_reader: DictReader,
+    ) -> str:
+        key_fill = re.sub(
+            self.key_pattern,
+            lambda m: f'"{self._key_fill(m, dict_reader)}"',
+            match.group(1)
+        )
+
+        return str(eval(key_fill))
 
 class FileTemplate(Template):
     def __init__(
         self,
-        path    : Path,
-        pattern : str = r'f{{(\S+)}}',
+        path:        Path,
+        key_pattern: str = r'f{{(\S+?)}}',
+        exe_pattern: str = r'x{{(.*)}}',
     ):
         super().__init__(
             path.open('r').read(),
-            pattern=pattern
+            key_pattern=key_pattern,
+            exe_pattern=exe_pattern,
         )
 
 class TOMLTemplate(FileTemplate):
     def __init__(
         self,
-        toml_path : Path,
-        pattern   : str = r'f{{(\S+)}}',
+        toml_path:   Path,
+        key_pattern: str = r'f{{(\S+?)}}',
+        exe_pattern: str = r'x{{(.*)}}',
     ):
         super().__init__(
             toml_path,
-            pattern=pattern
+            key_pattern=key_pattern,
+            exe_pattern=exe_pattern,
         )
 
     def fill(

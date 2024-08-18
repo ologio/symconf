@@ -3,22 +3,29 @@
 {ref}`modindex`
 {ref}`search`
 
+## Top-level module overview
+
 ```{eval-rst}
 .. autosummary::
    :nosignatures:
+   :recursive:
 
-    # list modules here for quick links
+    symconf.config
+    symconf.template
+    symconf.matching
+    symconf.reader
+    symconf.runner
 ```
 
+## Auto-reference contents
 ```{toctree}
 :maxdepth: 3
-:caption: Autoref
 
 _autoref/symconf.rst
 ```
 
 ```{toctree}
-:maxdepth: 3
+:maxdepth: 2
 :caption: Contents
 
 reference/configuring
@@ -28,4 +35,7 @@ reference/documentation/index
 ```
 
 ```{include} ../README.md
+:relative-docs: docs/
+:relative-images:
 ```
+

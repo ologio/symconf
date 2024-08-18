@@ -1,3 +1,6 @@
+'''
+Simplified management for nested dictionaries
+'''
 import copy
 import pprint
 import tomllib

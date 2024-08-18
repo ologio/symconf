@@ -14,7 +14,7 @@ def color_text(text, *colorama_args):
     Note: we attempt to preserve expected nested behavior by only resetting the groups
     (Fore, Back, Style) affected the styles passed in. This works when an outer call is
     changing styles in one group, and an inner call is changing styles in another, but
-    _not_ when affected groups overlap.
+    *not* when affected groups overlap.
 
     For example, if an outer call is setting the foreground color (e.g., ``Fore.GREEN``),
     nested calls on the text being passed into the function can modify and reset the
