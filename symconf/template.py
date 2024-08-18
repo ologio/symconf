@@ -14,7 +14,7 @@ class Template:
         self,
         template_str  : str,
         key_pattern   : str = r'f{{(\S+?)}}',
-        exe_pattern   : str = r'x{{(.*)}}',
+        exe_pattern   : str = r'x{{((?:(?!x{{).)*)}}',
     ):
         self.template_str = template_str
         self.key_pattern  = key_pattern
@@ -67,7 +67,7 @@ class FileTemplate(Template):
         self,
         path:        Path,
         key_pattern: str = r'f{{(\S+?)}}',
-        exe_pattern: str = r'x{{(.*)}}',
+        exe_pattern   : str = r'x{{((?:(?!x{{).)*)}}',
     ):
         super().__init__(
             path.open('r').read(),
@@ -80,7 +80,7 @@ class TOMLTemplate(FileTemplate):
         self,
         toml_path:   Path,
         key_pattern: str = r'f{{(\S+?)}}',
-        exe_pattern: str = r'x{{(.*)}}',
+        exe_pattern   : str = r'x{{((?:(?!x{{).)*)}}',
     ):
         super().__init__(
             toml_path,
