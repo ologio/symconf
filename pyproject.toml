@@ -48,6 +48,5 @@ Documentation = "https://doc.olog.io/symconf"
 Repository = "https://git.olog.io/olog/symconf"
 Issues = "https://git.olog.io/olog/symconf/issues"
 
-
 [tool.setuptools.packages.find]
 include = ["symconf*"] # pattern to match package names 

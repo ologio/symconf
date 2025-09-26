@@ -1,6 +1,7 @@
 '''
 Support for basic config templates
 '''
+
 import re
 import tomllib
 from pathlib import Path
@@ -62,6 +63,7 @@ class Template:
 
         return str(eval(key_fill))
 
+
 class FileTemplate(Template):
     def __init__(
         self,
@@ -74,6 +76,7 @@ class FileTemplate(Template):
             key_pattern=key_pattern,
             exe_pattern=exe_pattern,
         )
+
 
 class TOMLTemplate(FileTemplate):
     def __init__(

@@ -20,8 +20,11 @@ is mostly important when the same config file names are present across ``user``
 and ``generated`` subdirectories; unique path names need to be resolved to unique
 path locations).
 '''
+
 import os
+import sys
 import tomllib
+import subprocess
 from pathlib import Path
 
 from colorama import Fore, Back, Style
@@ -30,8 +33,8 @@ from symconf import util
 from symconf.util import printc, color_text
 
 from symconf.runner import Runner
-from symconf.template import FileTemplate, TOMLTemplate
 from symconf.matching import Matcher, FilePart
+from symconf.template import FileTemplate, TOMLTemplate
 
 
 class ConfigManager:
@@ -44,23 +47,24 @@ class ConfigManager:
         Configuration manager class
 
         Parameters:
-            config_dir: config parent directory housing expected files (registry,
-                        app-specific conf files, etc). Defaults to
-                        ``"$XDG_CONFIG_HOME/symconf/"``.
-            disable_registry: disable checks for a registry file in the ``config_dir``.
-                              Should really only be set when using this programmatically
-                              and manually supplying app settings.
+            config_dir: config parent directory housing expected files
+                (registry, app-specific conf files, etc). Defaults to
+                ``"$XDG_CONFIG_HOME/symconf/"``.
+            disable_registry: disable checks for a registry file in the
+                ``config_dir``. Should really only be set when using this
+                programmatically and manually supplying app settings.
         '''
+
         if config_dir == None:
             config_dir = util.xdg_config_path()
 
         self.config_dir = util.absolute_path(config_dir)
-        self.apps_dir   = Path(self.config_dir, 'apps')
-        self.group_dir  = Path(self.config_dir, 'groups')
+        self.apps_dir = Path(self.config_dir, 'apps')
+        self.group_dir = Path(self.config_dir, 'groups')
 
         self.app_registry = {}
         self.matcher = Matcher()
-        self.runner  = Runner()
+        self.runner = Runner()
 
         self._check_dirs()
         if not disable_registry:
@@ -74,6 +78,7 @@ class ConfigManager:
         ``config_dir`` and it must have an ``apps/`` subdirectory (otherwise there are
         simply no files to act on, not even when manually providing app settings).
         '''
+
         # throw error if config dir doesn't exist
         if not self.config_dir.exists():
             raise ValueError(
@@ -95,6 +100,7 @@ class ConfigManager:
         the registry dict. If this isn't present, the TOML file is either incorrectly
         configured, or it's empty and there are no apps to operate on.
         '''
+
         registry_path = Path(self.config_dir, 'app_registry.toml')
 
         if not registry_path.exists():
@@ -122,6 +128,7 @@ class ConfigManager:
         by the user, but need to be interpreted in the system context (e.g., either
         resolving to "any" or using the app's currently set option from the cache).
         '''
+
         if value == 'auto':
             # look group up in app cache and set to current value
             return 'any'
@@ -131,9 +138,10 @@ class ConfigManager:
     def _symlink_paths(
         self,
         to_symlink: list[tuple[Path, Path]],
+        user: str | None = None,
     ):
         '''
-        Symlink paths safely from target paths to internal config paths 
+        Symlink paths safely from target paths to internal config paths.
 
         This method upholds the consistent symlink model: target locations are only
         symlinked from if they don't exist or are already a symlink. We never overwrite
@@ -145,39 +153,36 @@ class ConfigManager:
             to_symlink: path pairs to symlink, from target (external) path to source
                         (internal) path
         '''
+
         links_succ = []
         links_fail = []
         for from_path, to_path in to_symlink:
             if not to_path.exists():
-                print(f'Internal config path "{to_path}" doesn\'t exist, skipping')
-                links_fail.append((from_path, to_path))
+                reason = f'Internal config path "{to_path}" doesn\'t exist, skipping'
+                links_fail.append((from_path, to_path, reason))
                 continue
 
             # if config file being symlinked exists & isn't already a symlink (i.e.,
             # previously set by this script), throw an error.
             if from_path.exists() and not from_path.is_symlink():
-                printc(
+                reason = (
                     f'Symlink target "{from_path}" exists and isn\'t a symlink, NOT overwriting; '
                     f'please first manually remove this file so a symlink can be set.',
-                    Fore.RED 
                 )
-                links_fail.append((from_path, to_path))
+                links_fail.append((from_path, to_path, reason))
                 continue
-            else:
-                # if path doesn't exist, or exists and is symlink, remove the symlink in
-                # preparation for the new symlink setting
-                from_path.unlink(missing_ok=True)
 
-            # create parent directory if doesn't exist
-            from_path.parent.mkdir(parents=True, exist_ok=True)
-
-            from_path.symlink_to(to_path)
-            links_succ.append((from_path, to_path))
+            try:
+                self.symlink(from_path, to_path, user)
+                links_succ.append((from_path, to_path))
+            except Exception as e:
+                reason = f'Symlink failed: {e}'
+                links_fail.append((from_path, to_path, reason))
 
         # link report
         for from_p, to_p in links_succ:
             from_p = util.to_tilde_path(from_p)
-            to_p   = to_p.relative_to(self.config_dir)
+            to_p = to_p.relative_to(self.config_dir)
             print(
                 color_text("│", Fore.BLUE),
                 color_text(
@@ -186,9 +191,10 @@ class ConfigManager:
                 )
             )
 
-        for from_p, to_p in links_fail:
+        for from_p, to_p, reason in links_fail:
             from_p = util.to_tilde_path(from_p)
-            to_p   = to_p.relative_to(self.config_dir)
+            to_p = to_p.relative_to(self.config_dir)
+
             print(
                 color_text("│", Fore.BLUE),
                 color_text(
@@ -196,11 +202,15 @@ class ConfigManager:
                     Fore.RED
                 )
             )
+            print(
+                color_text("│", Fore.BLUE),
+                color_text(f' > {reason}', Fore.RED + Style.DIM)
+            )
 
     def _matching_template_groups(
         self, 
         scheme = 'auto',
-        style  = 'auto',
+        style = 'auto',
         **kw_groups,
     ) -> tuple[dict, list[FilePart]]:
         '''
@@ -252,8 +262,9 @@ class ConfigManager:
         ``nones`` directly if you want by specifying that directly.
         ``get_matching_scripts()`` is similar in this sense.
         '''
+
         scheme = self._resolve_group('scheme', scheme)
-        style  = self._resolve_group('style', style)
+        style = self._resolve_group('style', style)
 
         groups = {
             k : self._resolve_group(k, v)
@@ -339,7 +350,7 @@ class ConfigManager:
             theme_dict = util.deep_update(theme_dict, toml_dict)
 
         template_dict = {
-            group : TOMLTemplate.stack_toml(ordered_matches)
+            group: TOMLTemplate.stack_toml(ordered_matches)
             for group, ordered_matches in group_matches.items()
         }
         template_dict['theme'] = theme_dict
@@ -348,8 +359,8 @@ class ConfigManager:
 
     def _prepare_all_templates(
         self,
-        scheme = 'any',
-        style  = 'any',
+        scheme: str = 'any',
+        style: str = 'any',
     ) -> dict[str, dict]:
         palette_map = {}
         palette_group_dir = Path(self.group_dir, 'palette')
@@ -398,10 +409,10 @@ class ConfigManager:
 
     def get_matching_configs(
         self, 
-        app_name,
-        scheme = 'auto',
-        style  = 'auto',
-        strict = False,
+        app_name: str,
+        scheme: str = 'auto',
+        style: str  = 'auto',
+        strict: bool = False,
     ) -> dict[str, FilePart]:
         '''
         Get user-provided app config files that match the provided scheme and style
@@ -466,6 +477,7 @@ class ConfigManager:
         Returns:
             Dictionary 
         '''
+
         user_app_dir = Path(self.apps_dir, app_name, 'user')
 
         paths = []
@@ -492,9 +504,9 @@ class ConfigManager:
 
     def get_matching_templates(
         self,
-        app_name,
-        scheme='auto',
-        style='auto',
+        app_name: str,
+        scheme: str = 'auto',
+        style: str = 'auto',
         **kw_groups,
     ) -> tuple[dict[str, Path], dict, list[FilePart], int]:
         template_dict, theme_matches = self._matching_template_groups(
@@ -517,9 +529,9 @@ class ConfigManager:
 
     def get_matching_scripts(
         self,
-        app_name,
-        scheme='any',
-        style='any',
+        app_name: str,
+        scheme: str = 'any',
+        style: str = 'any',
     ) -> list[FilePart]:
         '''
         Execute matching scripts in the app's ``call/`` directory.
@@ -539,6 +551,7 @@ class ConfigManager:
         TODO: consider running just the most specific script? Users might want to design
         their scripts to be stackable, or they may just be independent.
         '''
+
         app_dir  = Path(self.apps_dir, app_name)
         call_dir = Path(app_dir, 'call')
 
@@ -563,11 +576,11 @@ class ConfigManager:
 
     def update_app_config(
         self,
-        app_name     : str,
+        app_name: str,
         app_settings : dict = None,
-        scheme       : str  = 'any',
-        style        : str  = 'any',
-        strict       : bool = False,
+        scheme: str = 'any',
+        style: str = 'any',
+        strict: bool = False,
         **kw_groups,
     ):
         '''
@@ -630,12 +643,16 @@ class ConfigManager:
             style: style spec
             strict: whether to match ``scheme`` and ``style`` strictly 
         '''
+
         if app_settings is None:
             app_settings = self.app_registry.get(app_name, {})
 
         if 'config_dir' in app_settings and 'config_map' in app_settings:
             print(f'App "{app_name}" incorrectly configured, skipping')
             return
+
+        # get possibly specified user
+        user = app_settings.get("user")
 
         # match both user configs and templates
         # -> "*_map" are dicts from config pathnames to FilePart / Paths
@@ -709,10 +726,17 @@ class ConfigManager:
         # print match messages
         num_links = len(to_symlink)
         num_scripts = len(script_list)
-        print(
-            color_text("├─", Fore.BLUE),
-            f'{app_name} :: matched ({num_links}) config files and ({num_scripts}) scripts'
-        )
+
+        if user is None:
+            print(
+                color_text("├─", Fore.BLUE),
+                f'{app_name} :: matched {num_links} config files, {num_scripts} scripts'
+            )
+        else:
+            print(
+                color_text("├─", Fore.BLUE),
+                f'{app_name}@user:{user} :: matched {num_links} config files, {num_scripts} scripts'
+            )
 
         rel_theme_matches = ' < '.join([
             str(fp.path.relative_to(self.group_dir))
@@ -727,15 +751,15 @@ class ConfigManager:
                 )
             )
 
-        self._symlink_paths(to_symlink)
+        self._symlink_paths(to_symlink, user)
         self.runner.run_many(script_list)
 
     def configure_apps(
         self,
-        apps   : str | list[str] = '*',
-        scheme : str             = 'any',
-        style  : str             = 'any',
-        strict : bool            = False,
+        apps: str | list[str] = '*',
+        scheme: str = 'any',
+        style: str = 'any',
+        strict: bool = False,
         **kw_groups,
     ):
         if apps == '*':
@@ -780,6 +804,7 @@ class ConfigManager:
         Mostly a helper method for install and update actions, calling a static script
         name under each app's directory.
         '''
+
         if apps == '*':
             # get all registered apps
             app_list = list(self.app_registry.keys())
@@ -817,10 +842,10 @@ class ConfigManager:
 
     def generate_app_templates(
         self,
-        gen_dir : str | Path,
-        apps    : str | list[str] = '*',
-        scheme : str             = 'any',
-        style  : str             = 'any',
+        gen_dir: str | Path,
+        apps: str | list[str] = '*',
+        scheme: str = 'any',
+        style: str = 'any',
         **kw_groups,
     ):
         if apps == '*':
@@ -852,7 +877,7 @@ class ConfigManager:
                 **kw_groups
             )
 
-            num_temps  = len(app_template_files)
+            num_temps = len(app_template_files)
             num_themes = len(theme_map)
             print(
                 color_text("├─", Fore.BLUE),
@@ -877,3 +902,49 @@ class ConfigManager:
                         color_text("│", Fore.BLUE),
                         f'>  generating "{tgt_template_path.name}"'
                     )
+
+    def symlink(
+        self,
+        from_path: Path,
+        to_path: Path,
+        user: str | None = None,
+    ) -> None:
+        # attempt in-built pathlib symlink
+        if user is None:
+            # create parent directory if doesn't exist
+            from_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # if path doesn't exist, or exists and is a symlink, remove the
+            # symlink in preparation for the new symlink setting
+            from_path.unlink(missing_ok=True)
+
+            # attempt to set symlink 
+            Path(from_path).symlink_to(Path(to_path))
+
+            return
+
+        # otherwise bottle up and run as specified user w/ permissions
+        compact_symlink_py = (
+             "import os,sys,pathlib;"
+             "p=pathlib.Path(sys.argv[1]).parent;"
+             "p.mkdir(parents=True,exist_ok=True);"
+             "pathlib.Path(sys.argv[1]).unlink(missing_ok=True);"
+             "pathlib.Path(sys.argv[1]).symlink_to(sys.argv[2])"
+         )
+
+        sudo_prompt = (
+            color_text("│  > ", Fore.BLUE)
+            + color_text(f"[symlinks require {user} permissions]", Fore.RED + Style.BRIGHT)
+            + color_text(f" password for %p: ", Fore.RED)
+        )
+
+        subprocess.run(
+            [
+                "sudo",
+                "-u", user,
+                "-p", sudo_prompt,
+                sys.executable,
+                "-c", compact_symlink_py, str(from_path), str(to_path)
+            ],
+            check=True
+        )

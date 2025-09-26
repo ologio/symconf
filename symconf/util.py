@@ -24,6 +24,7 @@ def color_text(text, *colorama_args):
     request will be "canceled out" as soon as the first inner call is made (since the
     unconditional behavior just employs ``Style.RESET_ALL``).
     '''
+
     # reverse map colorama Ansi codes
     resets = []
     for carg in colorama_args:
@@ -52,6 +53,7 @@ def to_tilde_path(path: Path) -> Path:
     '''
     Abbreviate an absolute path by replacing HOME with "~", if applicable.
     '''
+
     try:
         return Path(f"~/{path.relative_to(Path.home())}")
     except ValueError:
@@ -59,6 +61,7 @@ def to_tilde_path(path: Path) -> Path:
 
 def deep_update(mapping: dict, *updating_mappings: dict) -> dict:
     '''Code adapted from pydantic'''
+
     updated_mapping = mapping.copy()
     for updating_mapping in updating_mappings:
         for k, v in updating_mapping.items():

@@ -29,6 +29,7 @@ gets mapped to
     scheme   -> "dark"
     pathname -> "kitty.conf"
 '''
+
 from pathlib import Path
 
 from symconf import util
@@ -72,6 +73,7 @@ class Matcher:
 
         where ``style`` is typically itself of the form ``<variant>-<palette>``.
         '''
+
         file_parts = []
         for path in paths:
             try:
@@ -96,6 +98,7 @@ class Matcher:
         are ``any``. In general, when ``any`` is provided for a given factor, it is
         best matched by a config file that expresses indifference under that factor.
         '''
+
         # explicit cases are the most easily managed here, even if a little redundant
         if strict:
             theme_order = [
@@ -193,6 +196,7 @@ class Matcher:
             prefix_order:
             strict:
         '''
+
         file_parts = self.get_file_parts(paths)
 
         ordered_matches = []
@@ -236,6 +240,7 @@ class Matcher:
         take precedent. These TOML files would be stacked before using the resulting
         dictionary to populate config templates.
         '''
+
         if not match_list:
             return []
 

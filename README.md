@@ -56,8 +56,14 @@ details.
 
 # Installation
 The recommended way to install `symconf` is via `pipx`, which is particularly well-suited
-for managing Python packages meant to be used as CLI programs. With `pipx` on your system,
+for managing Python packages meant to be used as CLI programs. With `uv` on your system,
 you can install with
+
+```sh
+uv too install symconf
+```
+
+Alternatively, you can use `pipx` to similar effect:
 
 ```sh
 pipx install symconf
