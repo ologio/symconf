@@ -1,27 +1,26 @@
 [build-system]
-requires = ["setuptools", "wheel", "setuptools-git-versioning>=2.0,<3"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
-
-[tool.setuptools-git-versioning]
-enabled = true
 
 [project]
 name = "symconf"
+version = "0.8.2"
 description = "Local app configuration manager"
-readme = "README.md"
 requires-python = ">=3.12"
-dynamic = ["version"]
-#license = {file = "LICENSE"}
 authors = [
   { name="Sam Griesemer", email="samgriesemer+git@gmail.com" },
 ]
-keywords = ["config"]
+
+readme = "README.md"
+license = "MIT"
+keywords = ["tempate-engine", "theme-switcher", "configuration-files"]
 classifiers = [
-    "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
     "Operating System :: OS Independent",
     "Development Status :: 3 - Alpha",
+
     "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
 ]
 dependencies = [
     "pyxdg",
@@ -32,15 +31,16 @@ dependencies = [
 symconf = "symconf.__main__:main"
 
 [project.optional-dependencies]
-tests = ["pytest"]
-docs = [
+doc = [
     "sphinx",
     "sphinx-togglebutton",
     "sphinx-autodoc-typehints",
     "furo",
     "myst-parser",
 ]
-build = ["build", "twine"]
+dev = [
+    "pytest"
+]
 
 [project.urls]
 Homepage = "https://doc.olog.io/symconf"
@@ -50,3 +50,23 @@ Issues = "https://git.olog.io/olog/symconf/issues"
 
 [tool.setuptools.packages.find]
 include = ["symconf*"] # pattern to match package names 
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+select = ["ANN", "E", "F", "UP", "B", "SIM", "I", "C4", "PERF"]
+
+[tool.ruff.lint.isort]
+length-sort = true
+order-by-type = false
+force-sort-within-sections = false
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+"**/__init__.py" = ["F401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true

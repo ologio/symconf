@@ -60,7 +60,7 @@ for managing Python packages meant to be used as CLI programs. With `uv` on your
 you can install with
 
 ```sh
-uv too install symconf
+uv tool install symconf
 ```
 
 Alternatively, you can use `pipx` to similar effect:
