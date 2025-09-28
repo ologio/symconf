@@ -11,10 +11,11 @@
    :recursive:
 
     symconf.config
-    symconf.template
-    symconf.matching
     symconf.reader
     symconf.runner
+    symconf.matching
+    symconf.template
+    symconf.util
 ```
 
 ## Auto-reference contents
@@ -28,10 +29,10 @@ _autoref/symconf.rst
 :maxdepth: 2
 :caption: Contents
 
-reference/configuring
-reference/usage
 reference/archive
-reference/documentation/index
+reference/configuring
+reference/matching
+reference/usage
 ```
 
 ```{include} ../README.md

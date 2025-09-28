@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache/
 .python-version
 .venv/
+.ruff_cache/
 
 # vendor and build files
 dist/
