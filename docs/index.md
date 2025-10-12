@@ -1,33 +1,26 @@
-# `symconf` package docs 
+# `symconf` package
+*General-purpose local application configuration manager*
+
 {ref}`genindex`
 {ref}`modindex`
-{ref}`search`
-
-## Top-level module overview
 
 ```{eval-rst}
 .. autosummary::
    :nosignatures:
    :recursive:
+   :caption: Modules
 
     symconf.config
     symconf.reader
     symconf.runner
     symconf.matching
     symconf.template
-    symconf.util
-```
-
-## Auto-reference contents
-```{toctree}
-:maxdepth: 3
-
-_autoref/symconf.rst
 ```
 
 ```{toctree}
-:maxdepth: 2
+:maxdepth: 1
 :caption: Contents
+:hidden:
 
 reference/archive
 reference/configuring
