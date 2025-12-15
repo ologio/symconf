@@ -59,9 +59,9 @@ files and give `symconf` something to act on. See
 [Configuring](docs/reference/configuring.md) for details.
 
 # Installation
-The recommended way to install `symconf` is via `pipx`, which is particularly
-well-suited for managing Python packages meant to be used as CLI programs. With
-`uv` on your system, you can install with
+The recommended way to install `symconf` is via `uv`'s "tool" subsystem, which
+is well-suited for managing Python packages meant to be used as CLI programs.
+With `uv` on your system, you can install with
 
 ```sh
 uv tool install symconf
