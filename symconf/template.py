@@ -4,6 +4,7 @@ Support for basic config templates
 
 import re
 import tomllib
+from typing import Any
 from pathlib import Path
 
 from symconf import util
@@ -89,10 +90,10 @@ class TOMLTemplate(FileTemplate):
             exe_pattern=exe_pattern,
         )
 
-    def fill(
+    def fill_dict(
         self,
         template_dict: dict,
-    ) -> str:
+    ) -> dict[str, Any]:
         filled_template = super().fill(template_dict)
         toml_dict = tomllib.loads(filled_template)
 

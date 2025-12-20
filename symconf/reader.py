@@ -50,10 +50,10 @@ class DictReader:
     def copy(self) -> "DictReader":
         return self.from_dict(copy.deepcopy(self._config))
 
-    def get_subconfig(self, key: str) -> "DictReader":
+    def get_subconfig(self, key: str) -> None:  # "DictReader":
         pass
 
-    def get(self, key: str, default: str | None = None) -> str:
+    def get(self, key: str, default: str | None = None) -> str | None:
         keys = key.split(".")
 
         subconfig = self._config
@@ -65,7 +65,7 @@ class DictReader:
 
         return subconfig.get(keys[-1], default)
 
-    def set(self, key: str, value: str) -> bool:
+    def set(self, key: str, value: str | None) -> bool:
         keys = key.split(".")
 
         subconfig = self._config

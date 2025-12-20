@@ -365,7 +365,7 @@ class ConfigManager:
 
         theme_dict = {}
         for file_part in relaxed_theme_matches:
-            toml_dict = TOMLTemplate(file_part.path).fill(palette_dict)
+            toml_dict = TOMLTemplate(file_part.path).fill_dict(palette_dict)
             theme_dict = util.deep_update(theme_dict, toml_dict)
 
         template_dict = {
@@ -423,7 +423,8 @@ class ConfigManager:
             theme_dict = {}
             palette_dict = TOMLTemplate.stack_toml(palette_paths)
             for file_part in relaxed_theme_matches:
-                toml_dict = TOMLTemplate(file_part.path).fill(palette_dict)
+                toml_template = TOMLTemplate(file_part.path)
+                toml_dict = toml_template.fill_dict(palette_dict)
                 theme_dict = util.deep_update(theme_dict, toml_dict)
 
             theme_map[fp.path.stem] = {"theme": theme_dict}
@@ -965,6 +966,9 @@ class ConfigManager:
             return
 
         # otherwise bottle up and run as specified user w/ permissions
+        # this looks sorta silly but I frankly think it's the easiest way to
+        # compactly set up a symlink procedure under an elevated subprocess (we
+        # *have* to wrap this up; can't do it in the current process)
         compact_symlink_py = (
             "import os,sys,pathlib;"
             "p=pathlib.Path(sys.argv[1]).parent;"

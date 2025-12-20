@@ -4,16 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "symconf"
-version = "0.8.3"
+version = "0.8.4"
 description = "Local app configuration manager"
 requires-python = ">=3.12"
 authors = [
-  { name="Sam Griesemer", email="samgriesemer+git@gmail.com" },
+  { name="Sam Griesemer", email="git@olog.io" },
 ]
-
 readme = "README.md"
 license = "MIT"
-keywords = ["tempate-engine", "theme-switcher", "configuration-files"]
+keywords = [
+    "tempate-engine",
+    "theme-switcher",
+    "configuration-files",
+]
 classifiers = [
     "Programming Language :: Python",
     "Operating System :: OS Independent",
@@ -31,6 +34,9 @@ dependencies = [
 symconf = "symconf.__main__:main"
 
 [project.optional-dependencies]
+dev = [
+    "ipykernel",
+]
 doc = [
     "sphinx",
     "sphinx-togglebutton",
@@ -38,7 +44,7 @@ doc = [
     "furo",
     "myst-parser",
 ]
-dev = [
+test = [
     "pytest"
 ]
 
@@ -49,7 +55,7 @@ Repository = "https://git.olog.io/olog/symconf"
 Issues = "https://git.olog.io/olog/symconf/issues"
 
 [tool.setuptools.packages.find]
-include = ["symconf*"] # pattern to match package names 
+include = ["symconf*"]
 
 [tool.ruff]
 line-length = 79
@@ -61,10 +67,6 @@ select = ["ANN", "E", "F", "UP", "B", "SIM", "I", "C4", "PERF"]
 length-sort = true
 order-by-type = false
 force-sort-within-sections = false
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]
-"**/__init__.py" = ["F401"]
 
 [tool.ruff.format]
 quote-style = "double"
